@@ -67,7 +67,22 @@ build-flags: gcc -std=gnu11 -O1 -Wall -Wextra -D_WIN32_WINNT=0x0601
 - [x] CancelSource 生命周期复现 → 修复 → ASan 干净
 - [x] Runtime Contract 落盘(`src/enca/ARCHITECTURE.md`,10 条不可违反 invariant,P1.10.7 启动)
 - [x] 基线冻结:`bench/baseline/2026-08-22-runtime-foundation.txt`(P1 Runtime Foundation 基准,后续阶段另建新基准)
-- [x] canary 跳过守卫泛化为 ASan+TSan(`ENCA_TEST_SANITIZER_RISKY`)
-- [~] Linux CI 工作流已落盘:`enca-linux.yml`(functional-debug/-opt、ASan+LSan、UBSan、TSan[初始 continue-on-error])、`enca-windows.yml`(MSYS2 gcc 功能套件 + clang ASan),**待首次 runner 实跑验证**
-- [ ] UBSan / TSan / LSan 实际转绿(依赖 CI 首跑,预期可能暴露首批真实发现)
+- [x] canary 跳过守卫泛化(ASan/TSan/UBSan → `ENCA_TEST_SANITIZER_RISKY`)
+- [~] Linux CI 工作流已落盘并推送;**GitHub Actions 云端首跑待观察**(fork 需确认 Actions 已启用)
+- [x] **WSL 真实 Linux 矩阵首跑(Ubuntu 24.04,gcc 13.3)——P1.10.6 本地验证通过**:
+
+  | Job | 结果 |
+  |---|---|
+  | functional-debug(-O0 -Werror) | 12087 checks, 0 failures |
+  | functional-opt(-O2 -Werror) | 12087 checks, 0 failures |
+  | ASan + LSan | 12073 checks, 0 failures,**0 泄漏** |
+  | UBSan(halt-on-error) | 12074 checks, 0 failures |
+  | TSan | exit 0,**0 data-race 报告**,12074 checks |
+
+- **首轮真实发现与处置**(均按 复现→根因→修复→回归 协议):
+  1. POSIX 线程后端从未被编译:`LPCRITICAL_SECTION` 泄漏进 pthread 分支 ×6、缺 `ENCA_NS_PER_S` 包含 → `enca: fix posix thread backend build`;
+  2. race harness 的 replacer 并发替换协议违背 LIFETIME 契约(覆盖未释放,LSan 捕获 16507 个泄漏源)→ 对齐整段持锁协议 `enca: align race harness with lifetime contract`;
+  3. test_memory 自身丢弃分配结果(LSan 80B)+ join 断言假设 HANDLE 语义(gcc 报错)→ 已修;
+  4. sanitizer 与负向探测测试的边界:panic 探针在任意 sanitizer 下跳过;GCC 无 UBSan 预定义宏,以 `-DENCA_TEST_UBSAN=1` 在 Makefile/workflow 构建入口显式声明。
 - [ ] Shutdown/stale-result 参数化长跑(Nightly 级,CI 化后添加)
+- 设计债备忘:header-tag 式所有权探测(`enca_mem_header.magic`)对外来指针的对齐读取属技术性 UB,Phase 2 Snapshot 所有权模型应引入注册表式追踪替代。
