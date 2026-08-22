@@ -3,6 +3,7 @@ enca_tests.exe
 enca_tests_asan*
 enca_tests_ubsan*
 enca_tests_tsan*
+enca_tests_win_asan*
 trace-dump-test.json
 rt_out*.txt
 rt_err*.txt
