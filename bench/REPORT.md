@@ -250,3 +250,44 @@ tag: `enca-p1.11-minimal-embedding`
 
 下一阶段(P2 Snapshot / State Isolation)另起基准,不在本 tag上演进 API。
 
+
+
+## 10. P2.0 Snapshot Foundation Gate(2026-08-23)
+
+按 P1.10.5 教训执行「先契约、再生命周期、后实现」:
+
+### 10.1 契约冻结(先于代码)
+- ARCHITECTURE.md 新增 #15–#19(Snapshot 语义 / 编码规范表示 / 类型化坐标 / 所有权生命周期 / 陈旧提交);
+- SNAPSHOT.md §12 落盘 L1–L7 生命周期规则:publish≠acquire;每个外发指针恰好携带一个引用;snapshot 寿命 ≥ 一切消费者(独立于 document);epoch 双字段(runtime_generation × document_revision)永不合并;registry 仅身份;任务析构唯一入口 enca_task_input_destroy 四路径复用;created-destroyed==live 不变式。
+
+### 10.2 实现
+- src/enca/snapshot/{snapshot.h,snapshot.c}:document/snapshot 对象、publish/acquire/release、两级 epoch 校验、flat UTF-8(canonical view 隐藏存储)、计数器组;
+- runtime 扩展(通用,worker 可见语义不变):enca_task_input_destroy 单一析构入口(可选 input_destroy 钩子)、submit_ex(stream_revision/user_data/borrow 输入)、completed 计数移至 res_push 之后(结果可见⇒已计数);
+- 垂直切片桥:enca_snap_submit_latest = latest_acquire + 零拷贝借用提交,引用随任务转移。
+
+### 10.3 测试矩阵(S 系列,+220 checks)
+content S01-S06(空/ASCII/多字节/混排/二进制/1MiB);lifetime S10-S14(refcount 平衡/supersede 存活/4 读者并发/document 先亡/source 变异不可变);stale S20-S24(gen-only 引擎弃/rev-only 回调弃/双匹配提交/FNV 值校验);destruction S30-S33(正常完成/协作取消/引擎弃/shutdown drain 全走同一析构);金丝雀 live==0 且 destroyed==created。
+
+### 10.4 过程发现并修复
+1. **TSan 抓到真实设计违规**:snap_destroy 在读者线程直接 enca_idr_free 触碰注册表(L5 违规,10 个 data race)→ 销毁改两阶段:引用归零仅原子入 pending 栈(wait-free push),发布线程 reclaim 点统一释放槽位与内存;worker 释放路径变为纯原子;
+2. tasks_completed_by_worker 原在 res_push 之前递增,spin 断言存在「计数已见、结果未可见」窗口 → 移至入队之后;
+3. 测试侧三处断言错误(poll 返回值=processed 含引擎弃;修订号起点)经插桩证实引擎行为正确后如实修正。
+
+### 10.5 本地验证(Windows gcc 14.2 五连跑 + WSL Ubuntu gcc 13.3)
+| 构建 | 结果 |
+|---|---|
+| functional -O1(gcc) ×5 | 12297 checks / 0 failures,无抖动 |
+| functional -O0 -Werror(WSL) | 12297 / 0 |
+| ASan+LSan+UBSan(WSL) | 12293 / 0,零泄漏 |
+| TSan(WSL) | RC=0,**0 data race**(修复前 10),12294 / 0 |
+
+### 10.6 P2.0 Gate 表
+```text
+Contract   #15-#19 + L1-L7            DONE
+Impl       Document/Snapshot/Registry/Publish/Acquire/TaskInput-destructor/UTF8-view  DONE
+Correct    Immutable/Mutate-independent/Gen-stale/Rev-stale/Two-level/4-paths/zero-live  DONE
+Sanitizer  ASan UBSan TSan            PASS(local)
+Perf       cost-model benchmark       P2.1(非本门禁)
+Not in P2.0: range/chunked/rope/piece-table/incremental-encode/parser/LSP  (明确不做)
+```
+
