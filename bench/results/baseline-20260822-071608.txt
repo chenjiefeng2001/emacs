@@ -1,0 +1,11 @@
+enca-baseline-record
+date: 2026-08-21T23:16:10Z
+emacs-version: 32.0.50
+git-revision: 11a1cb7445ddd0796a41e751aeeb145d289cb24c
+git-describe: emacs-31.0.90-881-g11a1cb7445d
+compiler-c: clang version 19.1.0
+configure-options: not-configured
+cpu: 12th Gen Intel(R) Core(TM) i7-12700H
+os: Microsoft Windows NT 10.0.29639.0
+build-flags: gcc -std=gnu11 -O1 -Wall -Wextra -D_WIN32_WINNT=0x0601 -D_CRT_SECURE_NO_WARNINGS -I../../src -o enca_tests_gcc <sources per test/enca/Makefile>
+gc-settings: default
