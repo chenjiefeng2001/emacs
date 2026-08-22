@@ -302,6 +302,7 @@ enca_condition_broadcast (enca_condition *c)
 
 # include <sched.h>
 # include <time.h>
+# include "../time/time.h"
 
 typedef struct thread_start_ctx
 {
@@ -386,25 +387,25 @@ void
 enca_mutex_destroy (enca_mutex *m)
 {
   if (m)
-    pthread_mutex_destroy ((LPCRITICAL_SECTION) &m->native);
+    pthread_mutex_destroy ((pthread_mutex_t *) &m->native);
 }
 
 void
 enca_mutex_lock (enca_mutex *m)
 {
-  pthread_mutex_lock ((LPCRITICAL_SECTION) &m->native);
+  pthread_mutex_lock ((pthread_mutex_t *) &m->native);
 }
 
 void
 enca_mutex_unlock (enca_mutex *m)
 {
-  pthread_mutex_unlock ((LPCRITICAL_SECTION) &m->native);
+  pthread_mutex_unlock ((pthread_mutex_t *) &m->native);
 }
 
 bool
 enca_mutex_try_lock (enca_mutex *m)
 {
-  return pthread_mutex_trylock ((LPCRITICAL_SECTION) &m->native) == 0;
+  return pthread_mutex_trylock ((pthread_mutex_t *) &m->native) == 0;
 }
 
 enca_result
@@ -438,7 +439,7 @@ abs_deadline_timespec (enca_u64 ns, struct timespec *ts)
 void
 enca_condition_wait (enca_condition *c, enca_mutex *m)
 {
-  pthread_cond_wait (&c->native, (LPCRITICAL_SECTION) &m->native);
+  pthread_cond_wait (&c->native, (pthread_mutex_t *) &m->native);
 }
 
 bool
@@ -446,7 +447,8 @@ enca_condition_timed_wait (enca_condition *c, enca_mutex *m, enca_u64 ns)
 {
   struct timespec ts;
   abs_deadline_timespec (ns, &ts);
-  return pthread_cond_timedwait (&c->native, (LPCRITICAL_SECTION) &m->native, &ts) == 0;
+  return pthread_cond_timedwait (&c->native,
+                                 (pthread_mutex_t *) &m->native, &ts) == 0;
 }
 
 void
