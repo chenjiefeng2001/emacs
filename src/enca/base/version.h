@@ -1,0 +1,11 @@
+#ifndef ENCA_VERSION_H
+#define ENCA_VERSION_H
+
+#define ENCA_VERSION_MAJOR 0
+#define ENCA_VERSION_MINOR 1
+#define ENCA_VERSION_PATCH 0
+#define ENCA_VERSION_STRING "0.1.0"
+
+#define ENCA_ABI_VERSION 1
+
+#endif
