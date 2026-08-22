@@ -86,3 +86,55 @@ build-flags: gcc -std=gnu11 -O1 -Wall -Wextra -D_WIN32_WINNT=0x0601
   4. sanitizer 与负向探测测试的边界:panic 探针在任意 sanitizer 下跳过;GCC 无 UBSan 预定义宏,以 `-DENCA_TEST_UBSAN=1` 在 Makefile/workflow 构建入口显式声明。
 - [ ] Shutdown/stale-result 参数化长跑(Nightly 级,CI 化后添加)
 - 设计债备忘:header-tag 式所有权探测(`enca_mem_header.magic`)对外来指针的对齐读取属技术性 UB,Phase 2 Snapshot 所有权模型应引入注册表式追踪替代。
+
+## 8. P1 Runtime Foundation 冻结(2026-08-22,云端 CI 首跑闭环后)
+
+本节为 P1 的**权威收尾记录**:§7 中的 `[~]`/`[ ]` 门禁在本节落定。P1 架构工作到此停止,后续改动以本基准为对照点(tag: `enca-p1-runtime-foundation`)。
+
+### 8.1 门禁表(最终)
+
+| Gate                   | 状态       |
+| ---------------------- | -------- |
+| Local GCC functional   | PASS     |
+| Local Clang ASan       | PASS     |
+| Linux functional-debug | PASS     |
+| Linux functional-opt   | PASS     |
+| Linux ASan + LSan      | PASS     |
+| Linux UBSan            | PASS     |
+| Linux TSan             | PASS     |
+| Windows MSYS2 GCC      | PASS     |
+| Windows Clang ASan     | PASS     |
+| Working tree           | CLEAN    |
+| CI                     | PUSHED   |
+| Shutdown long-run      | DEFERRED |
+| Stale-result long-run  | DEFERRED |
+
+注:**DEFERRED ≠ PASS**。两项长跑为 Nightly 级,尚未运行;自 P1.11 起以 Nightly 工作流并行补齐,不阻塞主线。
+
+### 8.2 云端首跑发现并处置的两个问题(均非 ENCA 核心语义缺陷)
+
+1. **Windows ASan「exit code 1」实为被测进程未能启动,而非测试失败**
+   - 链条:LLVM 20 默认链接动态 ASan 运行时 → `clang_rt.asan_dynamic-x86_64.dll` 位于 `<LLVM>\lib\clang\20\lib\windows\`,不在加载器搜索路径 → `0xC0000135 (STATUS_DLL_NOT_FOUND)` → 进程未及 main 即死。
+   - 取证:gdb 跟跑取到 thread exit code `3221225781`(即 0xC0000135);此前注解仅见 "exit code 1",属误导性表象。
+   - 处置:构建后将资源目录与 LLVM bin 下全部 `clang_rt*.dll` 拷至 exe 旁并前置 PATH(`enca: dump windows asan imports...` 系列)。另证:该发行版不支持 `-static-libsan`(驱动层拒绝)。
+   - **经验入库**:CI 必须保留 build / runtime loader / test execution / test result 四阶段信号,禁止 `make && ./test` 一把梭——「测试失败」与「进程未能启动」是两类故障,P2–P5 引入更多平台依赖后该区分持续有效。
+
+2. **Linux functional-debug 连续红(gdb 包装返回 255)→ canary 执行语义重划**
+   - 定位:本地实验证明 `gdb -batch -return-child-result` 在子进程死于信号时返回 255(SEGV/ABRT 均复现)→ CI 上 -O0 子进程真实崩溃;WSL 绑单核复现出 canary 饥饿 FAIL(reads==0)。
+   - 根因:`cancel-race/borrow-unretained` 是**设计上违反 ownership contract 的裸借用 UAF 探针**,其检测价值只在 sanitizer 监视下成立;非 sanitizer 构建依赖「释放块暂不被复用」的时序侥幸,慢速共享核上必然演化成崩溃。
+   - 处置(`81463ec0f69`):canary 仅在 `-DENCA_TEST_FORCE_RACE_CANARY` 时执行;`retain-on-load` 安全协议锤在所有构建不变。实测:常规构建 12077 checks / 0 failures,FORCE 构建 12087 checks / 0 failures。
+   - 结论:不是删除测试、不是降低标准,而是把**功能正确性测试**与**工具灵敏度测试**分层——canary 不再污染 correctness 分数。
+
+### 8.3 测试体系分层模型(P1.11 起保持)
+
+```text
+Functional(确定性 correctness)/ Concurrency stress / Sanitizer(ASan·TSan·UBSan)/ Canary(仅 FORCE)
+```
+
+### 8.4 进入 P1.11(最小嵌入)
+
+目标:证明 ENCA 可作为 Emacs 进程内长期存活 Runtime 而不破坏 Emacs。init → idle run → shutdown,**零用户可见行为变化**。
+
+硬 invariant:worker 绝不接触 Emacs Lisp_Object,只处理 native C data。
+
+Phase 2 所有权设计债(header-tag 对齐读取 UB)**维持不动**,待 Snapshot/BufferState 等对象出现后再设计;「logical identity ≠ object lifetime」原则由 Phase 2 直接继承。
