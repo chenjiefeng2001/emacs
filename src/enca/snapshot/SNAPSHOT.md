@@ -1,9 +1,10 @@
 # P2 Snapshot / State Isolation -- Design Contract
 
-Status: **P2.0 gate ACTIVE.**  Decisions frozen (advisor review
-2026-08-23); contracts #15-#19 landed in `../ARCHITECTURE.md`.
-Implementation must obey the lifetime protocol below -- written
-before any snapshot code exists, per the P1.10.5 lesson.
+Status: **P2.0 gate COMPLETE (frozen); P2.1 storage study ACTIVE.**
+The P2.0 implementation lives in `snapshot.{h,c}` and is untouched by
+the study: all experiment code (flat-vs-chunked cost model, workload
+corpus, metrics) lives under `bench/enca/` and consumes the same
+edit-script contract.  See `bench/REPORT.md` section 11 for data.
 
 Guiding principle (advisor ruling):
 

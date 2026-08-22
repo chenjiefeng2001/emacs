@@ -1,0 +1,9 @@
+*.exe
+*.o
+*.obj
+out.txt
+err.txt
+run_out.txt
+asan_out.txt
+build_log.txt
+bench_asan.*

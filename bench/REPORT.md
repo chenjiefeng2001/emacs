@@ -291,3 +291,49 @@ Perf       cost-model benchmark       P2.1(非本门禁)
 Not in P2.0: range/chunked/rope/piece-table/incremental-encode/parser/LSP  (明确不做)
 ```
 
+
+
+## 11. P2.1 存储研究与增量发布实验平台(2026-08-23)
+
+按评审定义执行:**P2.1 不是把 Snapshot 优化成增量结构,而是建立可重复的性能实验体系,用数据决定下一代存储**。P2.0 API 语义零改动;全部实验代码位于 `bench/enca/`(独立构建),冻结的 `src/enca/snapshot` 未触碰。
+
+### 11.1 实验平台(P2.1.0–P2.1.3)
+- **编辑流模型**(`editmodel.h`):EditScript{position, delete_len, insert_data} + 确定性 xorshift PRNG + FNV 校验;所有候选结构消费同一脚本,公平可比;
+- **工作负载语料**(`workloads.h`,冻结):W1 代码编辑(热区小改)/ W2 连续键入(逐字符修订)/ W3 粘贴(1K–1MB)/ W4 重构(1MB 块替换)/ W5 大文件局部编辑;
+- **指标**:capture 延迟 p50/p90/p99/max、content_copy_bytes、meta_bytes、live_bytes 增量(retention 维度)、并发读者聚合吞吐;
+- **正确性守卫**:参考缓冲逐编辑应用同一脚本,FNV 每 N 版核对一次(该守卫在本阶段实际抓出 harness 自身堆越界,见 §11.4);
+- 运行器:`run_matrix.ps1` 输出 CSV 至 `bench/results/p21_storage_study.csv`。
+
+### 11.2 候选实现
+| 家族 | 成本模型 |
+|---|---|
+| flat(P2.0 基线) | 每次发布全量复制:copied/edit = 文档大小 |
+| chunked v1(本次新增) | 不可变块缓冲 + 修订级分片表(piece = buf/off/len);编辑只重写触点附近的表项并分配新载荷(≤chunk_size 分块);旧表共享全部未触及切片 |
+
+v1 取「分片表」形态的原因:定长内容复制型 COW 在位移型编辑下无法约束拷贝量(退化为 O(doc));分片表给出与文档大小无关的 copied/edit,同时保留顺序读友好性。rope / piece-table / persistent tree 按 P2.1 边界仍为研究候选,不实现。
+
+### 11.3 核心数据(Windows gcc -O2;完整矩阵见 CSV)
+**Capture p50(ms) / 总拷贝字节 / retention 内存(live_delta)**
+
+| 场景 | flat | chunked 64K | 倍率 |
+|---|---|---|---|
+| W1 64KB ×3000,ret1 | 0.0041 ms / 210MB / 73KB | 0.0294 ms / **37KB** / 214KB | 拷贝 ↓5600× |
+| W1 1MB ×3000,ret1 | 0.395 ms / **3.16GB** / 1.05MB | 0.0238 ms / **37KB** / 1.21MB | 拷贝 ↓85000× |
+| W1 10MB ×300,ret16 | 4.70 ms / **3.15GB** / **168MB** | 0.0133 ms / **4KB** / **10.7MB** | 内存 ↓16× |
+| W3 10MB ×300(含粘贴),ret16 | 3.64 ms / 3.15GB / 168MB | 0.0083 ms / 405B / 10.7MB | — |
+| W5 100MB 局部编辑 ×60,ret4 | **45.53 ms** / **6.29GB** / 419MB | 0.047 ms (64K) / **8.4KB** / 105MB | 延迟 ↓970× |
+
+**Chunk-size sweep(W5@100MB)**:4K=0.33ms → 16K=0.11ms → 64K=0.047ms → 256K=0.018ms。v1 无合并策略下 chunk size 只影响初始切分与表长度(越大表越短),不产生经典写放大;该维度在引入合并/内容重写后需重测。
+
+**读者吞吐(8 readers,W5@10MB 顺序扫描)**:flat 5353 MB/s vs chunked 5053 MB/s(**−6%**)——回答 §11 关注:分片走查对 parser 型顺序访问近乎无损。
+
+### 11.4 过程发现并修复
+1. **harness 参考缓冲堆越界**(文档增长而 ref 缓冲固定):表现为随机 CORRUPT/hang/heap-abort,经 ASan+gdb heap-validation 定位;修复为倍增扩容。此 bug 与两个存储实现均无关,但再次验证「每一步都要有正确性守卫」;
+2. chunked 首版缺修订级引用计数(只有 buffer 级):环形保留+链式释放组合下双重拆表 → 补 rev refcount;
+3. `enca_workload` 内嵌 1MB scratch 移至堆(ASan 爆栈定位)。
+
+### 11.5 初步决策倾向(Result B 方向,待 P2.1 收尾确认)
+- 小文档(<~256KB)且低保留:flat 与 chunked 差距小,flat 简单性占优;
+- ≥1MB 或 retention≥8:chunked 全面优势(延迟 1–3 个量级、内存 ~15×);
+- 顺序读损耗 ≤6%,对 P4 parser 可接受;随机访问 O(pieces) 为已知短板,需要索引时再设计(契约 #17 已预留类型化坐标层)。
+
