@@ -39,7 +39,7 @@ jobs:
         working-directory: test/enca
         run: |
           clang --version
-          clang -std=c23 -O1 -g -fsanitize=address -fno-omit-frame-pointer `
+          clang -std=c23 -O1 -g -fsanitize=address -static-libsan -fno-omit-frame-pointer `
             -Wall -Wextra -D_CRT_SECURE_NO_WARNINGS -I../../src `
             -o enca_tests_win_asan.exe `
             ../../src/enca/diagnostics/error.c ../../src/enca/id/id.c `
@@ -58,6 +58,8 @@ jobs:
         working-directory: test/enca
         run: |
           $env:ASAN_OPTIONS = 'detect_leaks=0:verbosity=1'
+          $dll = & clang -print-file-name=clang_rt.asan_dynamic-x86_64.dll
+          if (Test-Path $dll) { Copy-Item $dll . }
           & .\enca_tests_win_asan.exe *>&1 | Tee-Object -FilePath asan_run.log
           $ec = $LASTEXITCODE
           $("exe_exit=$ec (0x{0:X})" -f $ec) | Add-Content asan_run.log
