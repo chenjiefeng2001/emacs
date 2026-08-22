@@ -138,3 +138,73 @@ Functional(确定性 correctness)/ Concurrency stress / Sanitizer(ASan·TSan·UB
 硬 invariant:worker 绝不接触 Emacs Lisp_Object,只处理 native C data。
 
 Phase 2 所有权设计债(header-tag 对齐读取 UB)**维持不动**,待 Snapshot/BufferState 等对象出现后再设计;「logical identity ≠ object lifetime」原则由 Phase 2 直接继承。
+
+## 9. P1.11 最小嵌入落地(2026-08-22)
+
+按上节规划落地 Emacs Build Integration。**本地全链路验证通过**(WSL2 Ubuntu 24.04,gcc 13.3,20 核)。
+
+### 9.1 落地内容
+
+| 文件 | 内容 |
+|---|---|
+| `configure.ac` | `--enable-enca`(默认 no);定义 `HAVE_ENCA` + `AC_SUBST(ENCA_OBJ)` |
+| `src/Makefile.in` | `ENCA_OBJ = @ENCA_OBJ@` 变量层;追加进 `base_obj`(→ doc_obj → obj → ALLOBJS);enca 子目录对象的显式模式规则 + `$(DEPDIR)` 镜像目录的 order-only 创建(AUTO_DEPEND=yes 时 GCC 不会自建 -MF 目录) |
+| `src/enca-emacs.c`(新) | 胶水层:`syms_of_enca` + 原语 `enca-available-p / enca-submit / enca-set-handler / enca-poll / enca-cancel / enca-status / enca-shutdown`;内部 `enca_glue_pump` / `enca_glue_shutdown`;handler 经 staticpro 保护 |
+| `src/lisp.h` | 三个函数声明(json.c 段后) |
+| `src/emacs.c` | `main()` 中 `#ifdef HAVE_ENCA syms_of_enca();`;`shut_down_emacs` 中 `sig==0` 时 join workers(致命信号路径不 join,防挂死) |
+| `src/process.c` | 泵点:`wait_reading_process_output` 的 timer 块之后——与 timer 相同的 Elisp 安全点提交结果 |
+| `src/enca/*/[a-z]*.c` ×15 | 文件首加 `#ifdef emacs # include <config.h> #endif`(Emacs 构建下满足 gnulib 包装头的 config.h-first 要求;独立构建不受影响) |
+| `.github/workflows/enca-linux.yml` | 新增 `emacs-build` job:autogen → configure `--enable-enca --without-x --without-all` → make → 批处理 E2E 冒烟 |
+
+设计要点:enca 对象名镜像源码相对路径(`enca/runtime/runtime.o`),make-docfile/buildobj.h 零特判;胶水原语全部惰性启动、无 DEFVAR、无新 Lisp 状态——禁用时 `ENCA_OBJ` 为空、无对象、无宏定义,**上游构建逐字节等价**。
+
+### 9.2 本地验证结果(已验证)
+
+- **enabled 路径**:`configure --enable-enca …` → `HAVE_ENCA=1`、`ENCA_OBJ` 替换正确 → `make -j20` RC=0(temacs 链接 + dump 完成);
+- **垂直切片 E2E(batch)**:
+  ```text
+  phase1 ok: (8 1 2252249828700414988)   ← 8 提交→8 回调,FNV-1a 全一致
+  post-cancel status: [2 24 22 8 14 2 0] ← cancel 后 16 个在飞任务精确入账
+                                           (14 stale-drop + 2 cooperative)
+  phase3 ok                               ← 新代继续接受提交(committed=9)
+  ENCA_E2E_OK                             ← shutdown 干净退出
+  ```
+- **disabled 默认路径**:重新 configure(不带开关)→ `/* #undef HAVE_ENCA */`、`ENCA_OBJ` 空、增量构建 RC=0、`(fboundp 'enca-submit)` = nil;
+- **子项目回归**:test/enca 全量 12077 checks / 0 failures(与 P1 冻结基线一致)。
+
+### 9.3 过程中发现并修复的问题(复现→根因→修复)
+
+1. **规则前向引用 DEPDIR**:规则块初版放在 `DEPDIR=` 定义之前,目标列表读取期展开为 `/enca/cancel/` → 移至 AUTO_DEPEND 段之后;
+2. **config.h-first 冲突**:enca 源直接包含系统头撞 gnulib 包装头(`Please include config.h first`)。`HAVE_CONFIG_H` 在 Emacs 构建中并未定义(CPPFLAGS 无该宏),改用 `-Demacs` 作守卫条件;
+3. **模式规则缺 `-o $@`**:对象按源文件基名落错目录且覆盖上游同名产物(`profiler.o`/`thread.o`)→ 补 `-o $@` 并清理被污染对象重建;
+4. **胶水鸡生蛋**:`#ifdef HAVE_ENCA` 包住了 `#include <config.h>` 自身 → 整个文件编译为空、链接 undefined reference → config.h 提到守卫之前;
+5. **fork 方言适配**:`CHECK_FUNCTION` 不存在 → `FUNCTIONP` + `wrong_type_argument (Qfunctionp, …)`;`ARRAYELTS` 已更名 `countof`;
+6. **PowerShell UTF-8 BOM**:PS5.1 `Set-Content -Encoding UTF8` 写入 BOM(gcc 可容忍但污染 diff)→ 逐一剥离。
+
+### 9.4 状态标注(已验证 vs 待 CI)
+
+- ✅ 本地已验证:§9.2 全部(Linux/gcc);
+- ⏳ 仅编写待 CI:`emacs-build` 云端首跑;Windows/W32 组合(enca thread 后端有 win32 实现但本机未配置 Emacs W32 构建);AUTO_DEPEND=no 的 deps.mk 分支(enca 对象暂无静态依赖条目,仅影响增量重建精度);clang 构建组合。
+
+### 9.5 Submission Gate(2026-08-22)
+
+按评审要求在提交前完成禁用路径硬验证(WSL 实测,非推断):
+
+| 断言 | 结果 |
+|---|---|
+| `HAVE_ENCA` 未定义(config.h) | PASS(`/* #undef HAVE_ENCA */`) |
+| `ENCA_OBJ` 为空 | PASS |
+| ALLOBJS/buildobj.h/DOC 零 enca 对象与条目 | PASS(启用态阳性对照:buildobj.h 含 enca-emacs.o) |
+| 全部原语不可见(fboundp=nil ×7) | PASS |
+| stock batch eval 行为不变 | PASS |
+
+判定:**P1.11 implementation = COMPLETE;cross-platform gate = PENDING**(等云端 CI:Linux 矩阵 + Windows + emacs-build 双路径)。
+
+契约冻结:嵌入不变量 #11–#14 落盘于 `src/enca/ARCHITECTURE.md`(主线程独占 Emacs 状态 / worker 禁持 Lisp_Object / Emacs 安全点 join / 禁用即上游)。胶水原语面冻结,不再扩 API。
+
+提交拆分(bisect 友好,每步 `--enable-enca` 均可独立构建):
+1. `enca: integrate runtime into emacs build system`(configure.ac/Makefile.in/enca 源 config.h 守卫)
+2. `enca: add minimal emacs runtime bridge`(enca-emacs.c/lisp.h/emacs.c/process.c + ARCHITECTURE 修订)
+3. `enca: add minimal embedding ci gate`(workflow)
+4. `enca: record p1.11 integration validation`(本节)
+
