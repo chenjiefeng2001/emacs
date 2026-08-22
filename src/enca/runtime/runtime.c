@@ -134,9 +134,18 @@ fnv1a_chunk (enca_u64 hash, const unsigned char *p, enca_usize n)
 static void
 free_task_input (enca_task_input *ti)
 {
+  enca_task_input_destroy (ti);
+}
+
+void
+enca_task_input_destroy (enca_task_input *ti)
+{
   if (!ti)
     return;
-  enca_free (ti->input_data);
+  if (ti->input_destroy)
+    ti->input_destroy (ti);
+  else
+    enca_free (ti->input_data);
   enca_free (ti);
 }
 
@@ -190,6 +199,7 @@ worker_main (void *arg)
       tr->source_id = ti->source_id;
       tr->task_seq = ti->task_seq;
       tr->revision = ti->revision;
+      tr->stream_revision = ti->stream_revision;
       tr->submit_ns = ev.timestamp;
       tr->value = 0;
 
@@ -222,9 +232,11 @@ worker_main (void *arg)
 
       tr->value = hash;
       tr->complete_ns = enca_monotonic_now_ns ();
-      enca_counter_add (&rt->tasks_completed_by_worker, 1);
 
       res_push (rt, tr);
+
+      /* Counted only once the result is observable in the queue. */
+      enca_counter_add (&rt->tasks_completed_by_worker, 1);
 
       free_task_input (ti);
     }
@@ -337,7 +349,22 @@ enca_result
 enca_runtime_submit (enca_runtime *rt, enca_object_id source_id,
                      enca_flags_t flags, const void *data, enca_usize n)
 {
-  if (!rt || (!data && n > 0))
+  enca_task_submit req;
+
+  req.source_id = source_id;
+  req.flags = flags;
+  req.data = data;
+  req.n = n;
+  req.stream_revision = 0;
+  req.user_data = NULL;
+  req.input_destroy = NULL;
+  return enca_runtime_submit_ex (rt, &req);
+}
+
+enca_result
+enca_runtime_submit_ex (enca_runtime *rt, const enca_task_submit *req)
+{
+  if (!rt || !req || (!req->data && req->n > 0))
     return ENCA_ERR_INVALID_ARGUMENT;
 
   enca_timer t;
@@ -351,28 +378,39 @@ enca_runtime_submit (enca_runtime *rt, enca_object_id source_id,
     return ENCA_ERR_OUT_OF_MEMORY;
 
   ti->input_data = NULL;
-  if (n > 0)
+  if (req->n > 0)
     {
-      ti->input_data = enca_malloc (n);
-      if (!ti->input_data)
+      if (req->flags & ENCA_TASK_BORROW_INPUT)
         {
-          enca_free (ti);
-          return ENCA_ERR_OUT_OF_MEMORY;
+          /* Borrowed view: lifetime guaranteed by input_destroy. */
+          ti->input_data = (unsigned char *) req->data;
         }
-      memcpy (ti->input_data, data, n);
+      else
+        {
+          ti->input_data = enca_malloc (req->n);
+          if (!ti->input_data)
+            {
+              enca_free (ti);
+              return ENCA_ERR_OUT_OF_MEMORY;
+            }
+          memcpy (ti->input_data, req->data, req->n);
+        }
     }
 
-  ti->source_id = source_id;
+  ti->source_id = req->source_id;
   ti->revision = gen;
-  ti->flags = flags;
-  ti->input_size = n;
+  ti->stream_revision = req->stream_revision;
+  ti->flags = req->flags;
+  ti->input_size = req->n;
+  ti->user_data = req->user_data;
+  ti->input_destroy = req->input_destroy;
   ti->task_seq = atomic_fetch_add_explicit (&rt->next_task_seq, 1,
                                             memory_order_relaxed);
 
   enca_event ev;
   ev.type = ENCA_EVENT_RUNTIME;
   ev.flags = ENCA_EVFLAG_TASK_SUBMIT;
-  ev.source = source_id;
+  ev.source = ti->source_id;
   ev.sequence = ti->task_seq;
   ev.timestamp = enca_monotonic_now_ns ();
   ev.payload = ti;

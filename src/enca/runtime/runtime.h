@@ -18,25 +18,61 @@
 #define ENCA_EVFLAG_TASK_SUBMIT ((enca_flags_t) (1u << 0))
 #define ENCA_EVFLAG_TASK_RESULT ((enca_flags_t) (1u << 1))
 
-typedef struct enca_task_input
+/* enca_task_input.flags domain (task inputs, not events). */
+#define ENCA_TASK_BORROW_INPUT ((enca_flags_t) (1u << 0))
+
+typedef struct enca_task_input enca_task_input;
+
+/* Single ownership hook (SNAPSHOT.md L6): when set, every runtime
+   disposal path routes through it instead of freeing input_data.
+   The hook owns everything except the task_input struct itself,
+   which the runtime frees after the hook returns. */
+typedef void (*enca_task_input_destroy_fn) (enca_task_input *input);
+
+struct enca_task_input
 {
   enca_object_id source_id;
   enca_u64 task_seq;
+  /* Runtime-generation staleness token; workers may cooperatively
+     abort on mismatch. */
   enca_u64 revision;
+  /* Opaque stream-level version tag (e.g. document revision).
+     Copied verbatim into results; never interpreted here. */
+  enca_u64 stream_revision;
   enca_flags_t flags;
   enca_usize input_size;
   unsigned char *input_data;
-} enca_task_input;
+
+  void *user_data;                          /* untouched by runtime */
+  enca_task_input_destroy_fn input_destroy; /* NULL = own input_data */
+};
 
 typedef struct enca_task_result
 {
   enca_object_id source_id;
   enca_u64 task_seq;
   enca_u64 revision;
+  enca_u64 stream_revision;
   enca_u64 value;
   enca_timestamp_ns submit_ns;
   enca_timestamp_ns complete_ns;
 } enca_task_result;
+
+/* Extended submission: what plain submit does plus opaque stream
+   tagging and payload-ownership delegation. */
+typedef struct enca_task_submit
+{
+  enca_object_id source_id;
+  enca_flags_t flags;
+  const void *data;
+  enca_usize n;
+  enca_u64 stream_revision;
+  void *user_data;
+  enca_task_input_destroy_fn input_destroy;
+} enca_task_submit;
+
+/* The one and only task-payload destruction entry point. */
+void enca_task_input_destroy (enca_task_input *input);
 
 typedef void (*enca_rt_commit_fn) (const enca_task_result *result,
                                    void *ctx);
@@ -83,6 +119,9 @@ ENCA_NODISCARD enca_result enca_runtime_submit (enca_runtime *rt,
                                                 enca_flags_t flags,
                                                 const void *data,
                                                 enca_usize n);
+
+ENCA_NODISCARD enca_result enca_runtime_submit_ex (enca_runtime *rt,
+                                                   const enca_task_submit *req);
 
 enca_u64 enca_runtime_current_generation (const enca_runtime *rt);
 void enca_runtime_advance_generation (enca_runtime *rt);
