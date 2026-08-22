@@ -9,7 +9,7 @@
 extern int enca_test_failures;
 extern int enca_test_checks;
 
-#if defined(_WIN32)
+#if defined(_MSC_VER) || (defined(__MINGW32__) && !defined(_UCRT))
 # define ENCA_TEST_U64F "%I64u"
 #else
 # define ENCA_TEST_U64F "%llu"

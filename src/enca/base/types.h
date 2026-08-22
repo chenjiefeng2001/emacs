@@ -29,7 +29,7 @@ typedef enca_u64 enca_seq_t;
 #define ENCA_KIB(n) ((enca_usize) (n) * 1024u)
 #define ENCA_MIB(n) (ENCA_KIB (n) * 1024u)
 
-#if defined(_WIN32)
+#if defined(_MSC_VER) || (defined(__MINGW32__) && !defined(_UCRT))
 # define ENCA_U64F "%I64u"
 #else
 # define ENCA_U64F "%llu"
