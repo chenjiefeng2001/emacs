@@ -1,0 +1,112 @@
+name: enca-linux
+
+on:
+  push:
+    paths:
+      - 'src/enca/**'
+      - 'test/enca/**'
+      - '.github/workflows/enca-*.yml'
+  pull_request:
+    paths:
+      - 'src/enca/**'
+      - 'test/enca/**'
+  workflow_dispatch:
+
+env:
+  ENCA_SRC: >-
+    src/enca/diagnostics/error.c
+    src/enca/id/id.c
+    src/enca/memory/allocator.c
+    src/enca/memory/arena.c
+    src/enca/memory/slab.c
+    src/enca/time/clock.c
+    src/enca/thread/thread.c
+    src/enca/event/event.c
+    src/enca/event/dispatch.c
+    src/enca/queue/spsc_ring.c
+    src/enca/queue/blocking_queue.c
+    src/enca/cancel/cancel.c
+    src/enca/trace/trace.c
+    src/enca/trace/profiler.c
+    src/enca/runtime/runtime.c
+  ENCA_TEST: >-
+    test/enca/main.c
+    test/enca/test_base.c
+    test/enca/test_id.c
+    test/enca/test_memory.c
+    test/enca/test_arena.c
+    test/enca/test_slab.c
+    test/enca/test_time.c
+    test/enca/test_thread.c
+    test/enca/test_queue.c
+    test/enca/test_event.c
+    test/enca/test_cancel.c
+    test/enca/test_cancel_race.c
+    test/enca/test_trace_perf.c
+    test/enca/test_runtime.c
+
+jobs:
+  functional-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (gcc -O0 -Werror)
+        run: |
+          gcc --version | head -n1
+          gcc -std=gnu11 -O0 -g -Wall -Wextra -Werror \
+            ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_dbg
+      - name: Run
+        run: ./enca_tests_dbg
+
+  functional-opt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (gcc -O2)
+        run: >
+          gcc -std=gnu11 -O2 -g -Wall -Wextra -Werror
+          ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_opt
+      - name: Run
+        run: ./enca_tests_opt
+
+  asan-lsan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ASAN_OPTIONS: detect_leaks=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (ASan)
+        run: >
+          gcc -std=gnu11 -O1 -g -fsanitize=address -fno-omit-frame-pointer
+          ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_asan
+      - name: Run (ASan + LSan)
+        run: ./enca_tests_asan
+
+  ubsan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (UBSan, halt on error)
+        run: >
+          gcc -std=gnu11 -O1 -g -fsanitize=undefined
+          -fno-sanitize-recover=all -fno-omit-frame-pointer
+          ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_ubsan
+      - name: Run
+        run: ./enca_tests_ubsan
+
+  tsan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (TSan)
+        run: >
+          gcc -std=gnu11 -O1 -g -fsanitize=thread -fno-omit-frame-pointer
+          ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_tsan
+      - name: Run
+        run: ./enca_tests_tsan

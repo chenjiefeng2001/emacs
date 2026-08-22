@@ -1,0 +1,59 @@
+name: enca-windows
+
+on:
+  push:
+    paths:
+      - 'src/enca/**'
+      - 'test/enca/**'
+      - '.github/workflows/enca-*.yml'
+  pull_request:
+    paths:
+      - 'src/enca/**'
+      - 'test/enca/**'
+  workflow_dispatch:
+
+jobs:
+  msys2-gcc-functional:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: false
+          install: make mingw-w64-x86_64-gcc
+      - name: Functional suite (gcc-check)
+        working-directory: test/enca
+        run: make gcc-check
+
+  clang-asan:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ASan suite (preinstalled LLVM clang, MSVC target)
+        shell: pwsh
+        working-directory: test/enca
+        run: |
+          clang --version
+          clang -std=c23 -O1 -g -fsanitize=address -fno-omit-frame-pointer `
+            -Wall -Wextra -D_CRT_SECURE_NO_WARNINGS -I../../src `
+            -o enca_tests_win_asan.exe `
+            ../../src/enca/diagnostics/error.c ../../src/enca/id/id.c `
+            ../../src/enca/memory/allocator.c ../../src/enca/memory/arena.c `
+            ../../src/enca/memory/slab.c ../../src/enca/time/clock.c `
+            ../../src/enca/thread/thread.c ../../src/enca/event/event.c `
+            ../../src/enca/event/dispatch.c ../../src/enca/queue/spsc_ring.c `
+            ../../src/enca/queue/blocking_queue.c ../../src/enca/cancel/cancel.c `
+            ../../src/enca/trace/trace.c ../../src/enca/trace/profiler.c `
+            ../../src/enca/runtime/runtime.c main.c test_base.c test_id.c `
+            test_memory.c test_arena.c test_slab.c test_time.c test_thread.c `
+            test_queue.c test_event.c test_cancel.c test_cancel_race.c `
+            test_trace_perf.c test_runtime.c
+      - name: Run ASan suite
+        shell: pwsh
+        working-directory: test/enca
+        run: ./enca_tests_win_asan.exe
