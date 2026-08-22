@@ -77,4 +77,33 @@ written amendment here first.
     Cooperative mid-task abort remains generation-scoped; correctness
     never depends on workers observing document revisions.
 
+20. Scheduler Business-Ignorance Contract.  The scheduler operates
+    only on abstract task attributes (class, urgency, deadline,
+    cancellation, cost/resource hints).  It must never contain the
+    vocabulary of any consumer (parser, completion, diagnostics,
+    LSP, editor).
+
+21. Task Identity Contract.  A task is not a work item: it carries
+    task_id, document_id, runtime generation, document revision,
+    retained snapshot reference, urgency (closed five-level enum),
+    optional deadline, cancellation source, task class and an opaque
+    execution-policy key.  Urgency and deadline are independent.
+
+22. Admission Contract.  Every task passes admission before it may be
+    queued; admission yields ACCEPT / REJECT / COALESCE / REPLACE /
+    DEFER.  A second gate at dispatch re-validates epoch, revision
+    and deadline.  Work that can no longer be committed MUST NOT be
+    executed when detectable ("drop before compute").
+
+23. Supersession Contract.  Task A is superseded by B only within the
+    same domain {document_id, task_class} and only when B carries a
+    strictly newer document revision.  Superseded queued tasks are
+    removed or dropped without execution; executing tasks are never
+    force-removed and observe cooperative cancellation.
+
+24. Scheduler Metrics Contract.  Implementations must expose schedule/
+    queue/execution/end-to-end latencies with tail percentiles, a
+    wasted-work ratio classified at the commit gate (#19), drop
+    counters per reason, and per-class queue-wait histograms.
+
 See `cancel/LIFETIME.md` for the cancellation-object lifetime protocol.

@@ -1,10 +1,12 @@
 # P2 Snapshot / State Isolation -- Design Contract
 
-Status: **P2.0 gate COMPLETE (frozen); P2.1 storage study ACTIVE.**
-The P2.0 implementation lives in `snapshot.{h,c}` and is untouched by
-the study: all experiment code (flat-vs-chunked cost model, workload
-corpus, metrics) lives under `bench/enca/` and consumes the same
-edit-script contract.  See `bench/REPORT.md` section 11 for data.
+Status: **P2 CLOSED (archived at tag `enca-p2.1-storage-closure`).**
+P2.0 implementation lives in `snapshot.{h,c}`; the storage decision
+(hybrid flat+chunked behind a StoragePolicy, C2 deferred coalescing)
+is recorded in `bench/REPORT.md` sections 11-12 with the frozen
+baseline in `bench/results/p21-flat-baseline-v1/`.  Experiment
+platform: `bench/enca/`.  Successor phase: P3 Scheduler (see
+`scheduler/SCHEDULER.md`).
 
 Guiding principle (advisor ruling):
 

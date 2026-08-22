@@ -398,3 +398,37 @@ C1 eager 被证伪(延迟 3×、物理内存 +65%——合并副本滞留保留�
 11 decision report       DONE (本节)
 ```
 
+
+
+## 13. P2.1 归档与 P3.0 Scheduler 契约冻结(2026-08-23)
+
+### 13.1 P2.1 归档
+- tag `enca-p2.1-storage-closure` 已指向决策提交;
+- 基线永久冻结于 `bench/results/p21-flat-baseline-v1/`(含环境元数据);
+- 架构结论:Snapshot → **StoragePolicy**(document_size × expected_retention × edit_frequency)→ {Flat, Chunked+C2 deferred}→ TextView;不引入 rope/piece-table/persistent tree(无未解场景);
+- SNAPSHOT.md 状态更新为 CLOSED。
+
+### 13.2 P3.0 契约冻结(先契约、后代码)
+新契约 `src/enca/scheduler/SCHEDULER.md`,核心冻结项:
+
+| 概念 | 冻结内容 |
+|---|---|
+| Task ≠ Work Item | Task 携带 task_id/document_id/generation/revision/snapshot/urgency/deadline/cancellation/task_class/policy 十要素 |
+| 业务无知边界(#20) | 调度器词汇表只允许 class/urgency/deadline/cancellation/cost/resource;禁止 parser/completion/LSP 等消费者词汇 |
+| Task Class | 封闭四类:SYSTEM / INTERACTIVE / BACKGROUND / MAINTENANCE(P2.1 C2 合并维护即首个 MAINTENANCE 消费者) |
+| Urgency(#21) | 封闭五级枚举(realtime..maintenance),**禁止整数优先级**;deadline 与 urgency 正交 |
+| 生命周期 | submit → **Admission**(ACCEPT/REJECT/COALESCE/REPLACE/DEFER)→ Queue → **Dispatch gate** → Execute → Commit;两道陈旧/过期门在计算之前 |
+| Supersession(#23) | 域 = {document_id, task_class},严格更新 revision 才可取代;跨文档/跨类永不;执行中任务仅协作取消 |
+| Drop-before-compute(#22) | 「不再能提交的工作不执行」为 P3 首要优化目标 |
+| 公平性 v1 | 类内 FIFO、类间固定优先级;饥饿风险以等待直方图度量,升级机制延后 |
+| 明确不做 | work stealing / NUMA / affinity / 抢占 / 自适应 / GPU / Elisp 线程池 API |
+
+### 13.3 P3 性能目标转向
+- 首要:**interactive tail latency**(p50/p90/p95/p99/p99.9,keypress→result);
+- 次要:**wasted-work ratio** = 不可提交已执行工作 / 总已执行(commit 门按 #19 双级 epoch 分类);
+- 吞吐量降为观测项。新增 drop 计数族:DROP_STALE / DROP_EXPIRED / DROP_SHUTDOWN。
+
+### 13.4 子阶段路线(每段独立门禁)
+P3.1 Task 模型+Admission 骨架 → P3.2 基础调度器(4 队列+N worker)→ P3.3 Supersession+stale 消除 → P3.4 Deadline+cancellation storm → P3.5 混合负载基准(S4)→ P3.6 公平性/tail 报告 → P3.7 扩展性研究(S5,1–32 workers)→ P3.8 决策(基础版是否足够)。
+基准 S1–S7 定义随契约一并冻结(单任务成本/突发/交互修订突发/混合/饱和/取消风暴/shutdown 风暴)。
+
