@@ -335,7 +335,7 @@ main (int argc, char **argv)
   printf ("%s,%s,%s,%llu,%llu,%llu,%d,%d,"
           "%.4f,%.4f,%.4f,%.4f,"
           "%llu,%llu,%llu,%.1f,%s,"
-          "%llx,%llu,%llu,%.2f,%llu,%d\n",
+          "%llx,%llu,%llu,%.2f,%llu,%d,%s,%s,%llu\n",
           family, cs_label, wl_name,
           (unsigned long long) doc_size,
           (unsigned long long) n_edits,
@@ -351,7 +351,10 @@ main (int argc, char **argv)
           (unsigned long long) physical,
           sharing,
           (unsigned long long) maint_copied_total,
-          cold_ok);
+          cold_ok,
+          coalesce,
+          (kind == ENCA_WL_SYNTHETIC ? locality : "-"),
+          (unsigned long long) (kind == ENCA_WL_SYNTHETIC ? edit_size : 0));
 
   fprintf (stderr,
            "[%s/%s size=%llu edits=%llu ret=%llu readers=%u]\n"

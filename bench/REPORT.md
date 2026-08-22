@@ -337,3 +337,64 @@ v1 取「分片表」形态的原因:定长内容复制型 COW 在位移型编�
 - ≥1MB 或 retention≥8:chunked 全面优势(延迟 1–3 个量级、内存 ~15×);
 - 顺序读损耗 ≤6%,对 P4 parser 可接受;随机访问 O(pieces) 为已知短板,需要索引时再设计(契约 #17 已预留类型化坐标层)。
 
+
+
+## 12. P2.1.5 Storage Decision Closure(2026-08-23)
+
+### 12.1 基线冻结
+`bench/results/p21-flat-baseline-v1/`(matrix.csv + ENVIRONMENT.txt:gcc 14.2 -O2 / i7-12700H / Win11 / commit / seed 策略)。后续一切优化声明以此为对照点。
+
+### 12.2 Benchmark 正确性验证(cross-check)
+同一 EditScript(seed42)下:**flat.final_hash == chunked(C0/C1/C2).final_hash = c527403b08c3e836**,长度一致;新增 final_hash/logical/physical/sharing/maint_copied 列落盘。逻辑字节 vs 物理字节 vs 拷贝字节三账本分离,不再只看 wall clock。
+
+### 12.3 关键数据
+**Crossover(W1, ret=1)**:16KB flat 赢(9.7μs vs 14.5μs);64KB chunked 赢(17.5μs vs 36.9μs)→ 交叉点 ∈(16KB, 64KB),且随 retention 上移。
+
+**Sharing ratio(W1@1MB, chunked-64K)**:
+| ret | flat live | chunked live | chunked sharing |
+|---|---|---|---|
+| 1 | 1.05MB | 1.07MB | 1.94 |
+| 8 | 8.40MB | 1.12MB | 8.29 |
+| 32 | 33.6MB | 1.32MB | 26.08 |
+| 128 | **134MB** | **1.92MB** | **70.37** |
+
+flat 的 sharing 恒 ≈1(retention 越大越差);chunked 共享率随 retention 近线性增长——**证实「存储策略是 Snapshot Population 属性而非 Document 属性」**。
+
+**Edit-size × Locality(16MB 文档,p50 ms)**:chunked 对 1B–100KB 编辑恒 0.005–0.018ms,局部性弱相关;flat 恒 5.9–9.9ms(与编辑尺寸无关——全量拷贝模型)。两族差距 ~600–1000×。
+
+**Reader scaling(W5@10MB)**:1r:520/520 → 8r:4003/1881(flat 优势段)→ 32r:8966/**9246**(chunked 反超)。聚合吞吐双双扩展良好;chunked 在高并发读者侧更稳。
+
+**Coalescing(W1@10MB ret16)**:
+| 策略 | p50 | physical | sharing |
+|---|---|---|---|
+| C0 none | 13.1μs | 10.19MB | 16.69 |
+| C1 local eager | **40.5μs(+3×)** | **16.79MB(+65%)** | 10.12 |
+| C2 deferred thr=1.25 | **11.5μs(−12%)** | 10.21MB | 16.65 | 
+| C2 thr=2 / 4 / 8 | 13.4 / 14.9 / 15.7μs | ~10.2–10.8MB | 15.8–16.7 |
+
+C1 eager 被证伪(延迟 3×、物理内存 +65%——合并副本滞留保留环);**C2 deferred 全面占优**,阈值 1.25–2 最佳且对前台零停顿影响;thr=8 过懒不触发(maint_copied=0)。
+
+**Cold snapshot(ret128, 第5版修订在 295 次编辑后读取)**:chunked 1.6ms 全量校验 ok=1;flat ok=1。两者均可安全持有极冷快照。
+
+### 12.4 Decision:**Result B — Hybrid Flat + Chunked(StoragePolicy)**
+- **<16KB 且低保留**:flat(简单性、无元数据开销);
+- **≥64KB 或 retention≥8**:chunked + **C2 deferred coalescing(threshold≈2, maint-every≈25)**;
+- 中间区间的选择由 policy 输入(document_size, expected_retention, edit_frequency)动态决定,**不写死架构常量**;
+- 架构表达:`Snapshot → StoragePolicy → {Flat Store, Chunked Store} → TextView`,P3/P4 仅见 Snapshot/TextView/OffsetIndex。
+- 不进入 P2.2 persistent/rope 研究:chunked+deferred 已覆盖当前全部目标场景,无未解需求。
+
+### 12.5 P2.1.5 Gate
+```text
+1 baseline freeze        DONE (p21-flat-baseline-v1/)
+2 correctness validation DONE (final-hash cross-check ×4)
+3 size sweep 1KB..1GB    DONE (Tier A/B/C)
+4 retention 1..128       DONE
+5 locality sweep         DONE (append/middle/random/hot)
+6 edit-size 1B..100KB    DONE
+7 reader scaling 1..32   DONE
+8 coalescing C0/C1/C2    DONE (+threshold sweep)
+9 cold snapshot          DONE
+10 sharing ratio         DONE (1.94 -> 70.37)
+11 decision report       DONE (本节)
+```
+
