@@ -57,13 +57,34 @@ jobs:
         shell: pwsh
         working-directory: test/enca
         run: |
-          $env:ASAN_OPTIONS = 'detect_leaks=0'
+          $env:ASAN_OPTIONS = 'detect_leaks=0:verbosity=1'
           & .\enca_tests_win_asan.exe *>&1 | Tee-Object -FilePath asan_run.log
-          "exe_exit=$LASTEXITCODE" | Add-Content asan_run.log
-          exit $LASTEXITCODE
-      - name: Upload ASan run log
+          $ec = $LASTEXITCODE
+          $("exe_exit=$ec (0x{0:X})" -f $ec) | Add-Content asan_run.log
+          exit $ec
+      - name: Diagnose under gdb
+        if: failure()
+        shell: pwsh
+        working-directory: test/enca
+        run: |
+          gdb -batch -ex run -ex "info program" -ex "bt 30" `
+            --args ./enca_tests_win_asan.exe *>&1 |
+            Tee-Object -FilePath asan_gdb.log
+      - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: enca-windows-asan-log
-          path: test/enca/asan_run.log
+          path: |
+            test/enca/asan_run.log
+            test/enca/asan_gdb.log
+      - name: Emit annotations
+        if: always()
+        shell: pwsh
+        working-directory: test/enca
+        run: |
+          $lines = @()
+          foreach ($f in 'asan_run.log', 'asan_gdb.log') {
+            if (Test-Path $f) { $lines += (Get-Content $f | Select-Object -First 5) }
+          }
+          foreach ($l in $lines) { Write-Output "::error::$l" }
