@@ -29,18 +29,41 @@ jobs:
         working-directory: test/enca
         run: make gcc-check
 
-  msys2-gcc-asan:
+  clang-asan:
     runs-on: windows-latest
     timeout-minutes: 40
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
-      - uses: msys2/setup-msys2@v2
-        with:
-          update: false
-          install: make mingw-w64-x86_64-gcc
-      - name: ASan suite (gcc)
+      - name: Build ASan suite (preinstalled LLVM clang, MSVC target)
+        shell: pwsh
         working-directory: test/enca
-        run: make CC=gcc asan
+        run: |
+          clang --version
+          clang -std=c23 -O1 -g -fsanitize=address -fno-omit-frame-pointer `
+            -Wall -Wextra -D_CRT_SECURE_NO_WARNINGS -I../../src `
+            -o enca_tests_win_asan.exe `
+            ../../src/enca/diagnostics/error.c ../../src/enca/id/id.c `
+            ../../src/enca/memory/allocator.c ../../src/enca/memory/arena.c `
+            ../../src/enca/memory/slab.c ../../src/enca/time/clock.c `
+            ../../src/enca/thread/thread.c ../../src/enca/event/event.c `
+            ../../src/enca/event/dispatch.c ../../src/enca/queue/spsc_ring.c `
+            ../../src/enca/queue/blocking_queue.c ../../src/enca/cancel/cancel.c `
+            ../../src/enca/trace/trace.c ../../src/enca/trace/profiler.c `
+            ../../src/enca/runtime/runtime.c main.c test_base.c test_id.c `
+            test_memory.c test_arena.c test_slab.c test_time.c test_thread.c `
+            test_queue.c test_event.c test_cancel.c test_cancel_race.c `
+            test_trace_perf.c test_runtime.c
+      - name: Run ASan suite
+        shell: pwsh
+        working-directory: test/enca
+        run: |
+          $env:ASAN_OPTIONS = 'detect_leaks=0'
+          & .\enca_tests_win_asan.exe *>&1 | Tee-Object -FilePath asan_run.log
+          "exe_exit=$LASTEXITCODE" | Add-Content asan_run.log
+          exit $LASTEXITCODE
+      - name: Upload ASan run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: enca-windows-asan-log
+          path: test/enca/asan_run.log
