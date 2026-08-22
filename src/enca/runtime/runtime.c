@@ -141,9 +141,15 @@ generation_cancelled (enca_runtime *rt, enca_u64 revision)
                             memory_order_acquire) != revision)
     return true;
 
+  enca_mutex_lock (&rt->state_lock);
   enca_cancel_source *src = atomic_load_explicit (&rt->gen_cancel,
                                                   memory_order_acquire);
-  return enca_cancel_source_is_cancelled (src);
+  enca_cancel_source_retain (src);
+  enca_mutex_unlock (&rt->state_lock);
+
+  bool cancelled = enca_cancel_source_is_cancelled (src);
+  enca_cancel_source_release (src);
+  return cancelled;
 }
 
 static enca_result
