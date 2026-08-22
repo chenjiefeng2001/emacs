@@ -218,14 +218,6 @@ worker_main (void *arg)
       tr->complete_ns = enca_monotonic_now_ns ();
       enca_counter_add (&rt->tasks_completed_by_worker, 1);
 
-      enca_event out;
-      out.type = ENCA_EVENT_RUNTIME;
-      out.flags = ENCA_EVFLAG_TASK_RESULT;
-      out.source = tr->source_id;
-      out.sequence = tr->task_seq;
-      out.timestamp = tr->complete_ns;
-      out.payload = NULL;
-
       res_push (rt, tr);
 
       free_task_input (ti);
