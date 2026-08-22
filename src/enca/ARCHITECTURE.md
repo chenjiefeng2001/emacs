@@ -45,4 +45,36 @@ written amendment here first.
     exactly as upstream: no ENCA objects linked, no feature macros
     defined, no primitives visible.
 
+15. Snapshot Semantic Contract.  A snapshot is an immutable
+    observation of one document at one revision.  After publication,
+    neither further edits nor newer revisions may affect a snapshot's
+    bytes or metadata.  A `const` qualifier alone never establishes
+    this: immutability is a property of ownership and publication,
+    not of an access path.
+
+16. Encoding / Canonical Representation.  Every snapshot exposes a
+    canonical UTF-8 view built once at publication and cached.
+    Consumers must not perform ad-hoc encoding normalization; source
+    representation travels as metadata and may be materialized
+    lazily.
+
+17. Coordinate / Offset Contract.  Offsets are typed (byte, Unicode
+    scalar, UTF-16, line/column) and converted only through the
+    snapshot layer's central index.  A single integer type must never
+    silently mean different units in different APIs.
+
+18. Ownership / Lifetime Contract.  Snapshot lifetime is governed
+    exclusively by reference counts and must cover every consumer's
+    lifetime; it is independent of buffer lifetime.  The object
+    registry provides identity, generation and type only -- never
+    lifetime.  Workers receive already-retained pointers at submit
+    time and perform no registry lookups, no locking and no
+    acquisition while running.
+
+19. Staleness / Commit Contract.  Results carry their full epoch:
+    runtime generation AND document revision.  A result commits only
+    if both match current values; either mismatch drops it as stale.
+    Cooperative mid-task abort remains generation-scoped; correctness
+    never depends on workers observing document revisions.
+
 See `cancel/LIFETIME.md` for the cancellation-object lifetime protocol.

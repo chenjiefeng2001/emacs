@@ -1,7 +1,9 @@
 # P2 Snapshot / State Isolation -- Design Contract
 
-Status: **P2.0 decisions resolved by advisor review (2026-08-23)**.
-No implementation yet; nothing here touches frozen P1/P1.11 surfaces.
+Status: **P2.0 gate ACTIVE.**  Decisions frozen (advisor review
+2026-08-23); contracts #15-#19 landed in `../ARCHITECTURE.md`.
+Implementation must obey the lifetime protocol below -- written
+before any snapshot code exists, per the P1.10.5 lesson.
 
 Guiding principle (advisor ruling):
 
@@ -211,3 +213,67 @@ implementation requirement to memcpy the buffer every publish.
 - Main thread remains sole owner of all Emacs state.
 - P1.11 bridge primitive set stays frozen until P2.2 amends the
   contract in writing.
+
+## 12. Lifetime Protocol (P2.0, frozen before implementation)
+
+Object relation and reference flow:
+
+```
+Emacs Buffer
+     |  capture (main thread only)
+     v
+Document  --publish-->  Snapshot
+                          |
+                          | acquire (+1) at submit
+                          v
+                      TaskInput --- worker reads view (no locks)
+                          |
+                          | enca_task_input_destroy (ALL paths)
+                          v
+                       release (-1) ---> [0] destroy
+```
+
+Rules (each is testable; see gate matrix):
+
+L1. `publish` = capture + canonicalize + index + immutable
+    publication.  `acquire` = refcount increment ONLY.  The two are
+    never merged: nothing that publishes may be needed to share.
+
+L2. Every pointer handed out carries exactly one reference:
+    publish returns a publisher-owned ref (also stored as the
+    document's slot), acquire/latest return new refs.  Release
+    pairing is explicit at every call site.
+
+L3. `Snapshot lifetime >= every consumer lifetime`.  NOT "buffer
+    lifetime >= snapshot lifetime": documents advance and may be
+    destroyed while superseded snapshots remain valid until their
+    last reference drops (S13).
+
+L4. Epoch is two distinct numbers (`enca_snapshot_epoch`:
+    runtime_generation, document_revision).  Never merge them into
+    one scalar; results carry the full epoch so commit-side
+    validation cannot forget a level.
+
+L5. Registry = identity/generation/type ONLY.  Slots are allocated
+    on the publishing thread at creation.  Slot RELEASE is deferred:
+    when the last reference drops on any thread, the snapshot enters
+    a lock-free pending stack (wait-free push, no locks); only the
+    publishing thread pops it (enca_snap_reclaim) and frees the
+    registry slot and memory.  Lookup never retains, retention never
+    looks up.  No thread other than the publisher ever touches the
+    registry or takes a lock.
+
+L6. Task payload destruction has ONE entry point,
+    `enca_task_input_destroy`, honoring an optional per-task
+    destructor hook.  All four disposal paths -- normal completion,
+    cooperative cancellation, engine stale drop, shutdown drain --
+    route through it.  No path frees payloads by hand.
+
+L7. Invariant counters (created/published/acquired/released/
+    destroyed/live) must satisfy `created - destroyed == live` once
+    reclamation has run, and shutdown requires `live == 0` with every
+    retired snapshot reclaimed.
+
+P2.0 scope guards: no range views, no chunked storage, no rope /
+piece table, no incremental UTF-8, no parsers, no LSP offsets beyond
+the typed-offset contract, no redisplay or threading changes.
