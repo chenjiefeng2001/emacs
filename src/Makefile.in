@@ -385,6 +385,11 @@ ANDROID_LIBS = @ANDROID_LIBS@
 ANDROID_LDFLAGS = @ANDROID_LDFLAGS@
 ANDROID_BUILD_CFLAGS = @ANDROID_BUILD_CFLAGS@
 
+## ENCA runtime foundation (--enable-enca).  Empty unless configured
+## with --enable-enca, in which case it lists objects under enca/
+## plus the glue file enca-emacs.o; see ../configure.ac.
+ENCA_OBJ = @ENCA_OBJ@
+
 LIBGMP_CFLAGS = @LIBGMP_CFLAGS@
 
 DUMPING=@DUMPING@
@@ -466,7 +471,7 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o     \
 	itree.o json.o 							       \
 	$(MSDOS_OBJ) $(MSDOS_X_OBJ) $(NS_OBJ) $(CYGWIN_OBJ) $(FONT_OBJ)        \
 	$(W32_OBJ) $(WINDOW_SYSTEM_OBJ) $(XGSELOBJ)			       \
-	$(HAIKU_OBJ) $(PGTK_OBJ) $(ANDROID_OBJ)
+	$(HAIKU_OBJ) $(PGTK_OBJ) $(ANDROID_OBJ) $(ENCA_OBJ)
 doc_obj = $(base_obj) $(NS_OBJC_OBJ)
 obj = $(doc_obj) $(HAIKU_CXX_OBJ)
 
@@ -530,6 +535,25 @@ ifeq ($(AUTO_DEPEND),yes)
 else
   DEPFLAGS =
   include $(srcdir)/deps.mk
+endif
+
+## ENCA runtime foundation sources live under enca/ and keep object
+## names that mirror their source paths, so make-docfile and
+## buildobj.h need no special cases.  The explicit pattern rule below
+## bypasses VPATH guessing.  When automatic dependency tracking is on,
+## GCC refuses to create missing -MF output directories itself, so the
+## mirrored $(DEPDIR) subdirectories are created as order-only
+## prerequisites before the first compile.  (Must stay after DEPDIR is
+## defined, since target lists are expanded when rules are read.)
+ifneq ($(strip $(filter enca/%,$(ENCA_OBJ))),)
+ENCA_DEPDIRS = $(patsubst %,$(DEPDIR)/%,$(sort $(dir $(filter enca/%,$(ENCA_OBJ)))))
+
+$(ENCA_DEPDIRS):
+	$(MKDIR_P) $@
+
+$(filter enca/%,$(ENCA_OBJ)): %.o: ${srcdir}/%.c config.h | $(ENCA_DEPDIRS)
+	$(AM_V_CC)$(CC) -c $(CPPFLAGS) $(ALL_CFLAGS) $(PROFILING_CFLAGS) \
+	  -o $@ $<
 endif
 
 ## This is the list of all Lisp files that might be loaded into the

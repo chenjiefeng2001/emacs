@@ -1,4 +1,10 @@
-﻿#include "memory.h"
+#ifdef emacs
+/* Building inside Emacs: pick up its configuration first, so that
+   gnulib's wrapped system headers are used consistently.  */
+# include <config.h>
+#endif
+
+#include "memory.h"
 
 #include "../base/assert.h"
 #include <stdatomic.h>

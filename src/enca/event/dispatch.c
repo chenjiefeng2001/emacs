@@ -1,3 +1,9 @@
+#ifdef emacs
+/* Building inside Emacs: pick up its configuration first, so that
+   gnulib's wrapped system headers are used consistently.  */
+# include <config.h>
+#endif
+
 #include "dispatch.h"
 #include "../queue/blocking_queue.h"
 #include "../queue/spsc_ring.h"

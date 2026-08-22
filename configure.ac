@@ -1767,6 +1767,32 @@ if test "$enable_check_lisp_object_type" = yes; then
     [Define to enable compile-time checks for the Lisp_Object data type.])
 fi
 
+dnl Experimental ENCA runtime foundation (src/enca).  Off by default;
+dnl when disabled, ENCA_OBJ is empty and Emacs builds exactly as
+dnl before (no objects, no defines, no behavior change).
+ENCA_OBJ=
+AC_ARG_ENABLE([enca],
+  [AS_HELP_STRING([--enable-enca],
+     [Link the experimental ENCA runtime foundation into Emacs
+      (see src/enca/ARCHITECTURE.md).])],
+  [],
+  [enable_enca=no])
+if test "$enable_enca" = yes; then
+  AC_DEFINE([HAVE_ENCA], [1],
+    [Define to 1 if the ENCA runtime foundation is linked into Emacs.])
+  dnl Keep in sync with src/Makefile.in: every entry must have a
+  dnl matching source file under src/enca/.
+  ENCA_OBJ='enca/cancel/cancel.o enca/diagnostics/error.o'
+  ENCA_OBJ="$ENCA_OBJ enca/event/dispatch.o enca/event/event.o"
+  ENCA_OBJ="$ENCA_OBJ enca/id/id.o enca/memory/allocator.o"
+  ENCA_OBJ="$ENCA_OBJ enca/memory/arena.o enca/memory/slab.o"
+  ENCA_OBJ="$ENCA_OBJ enca/queue/blocking_queue.o enca/queue/spsc_ring.o"
+  ENCA_OBJ="$ENCA_OBJ enca/runtime/runtime.o enca/thread/thread.o"
+  ENCA_OBJ="$ENCA_OBJ enca/time/clock.o enca/trace/profiler.o"
+  ENCA_OBJ="$ENCA_OBJ enca/trace/trace.o"
+fi
+AC_SUBST([ENCA_OBJ])
+
 WERROR_CFLAGS=
 # When compiling with GCC, prefer -isystem to -I when including system
 # include files, to avoid generating useless diagnostics for the files.
