@@ -208,3 +208,45 @@ Phase 2 所有权设计债(header-tag 对齐读取 UB)**维持不动**,待 Snaps
 3. `enca: add minimal embedding ci gate`(workflow)
 4. `enca: record p1.11 integration validation`(本节)
 
+### 9.6 云端门禁闭环与封版(2026-08-23)
+
+推送 `86005cf1172` 后双工作流首跑结果(GitHub Actions API 实查):
+
+| Gate | 结果 |
+|---|---|
+| enca-linux / functional-debug(-O0 -Werror) | PASS |
+| enca-linux / functional-opt(-O2) | PASS |
+| enca-linux / asan-lsan | PASS |
+| enca-linux / ubsan | PASS |
+| enca-linux / tsan | PASS |
+| enca-linux / **emacs-build(--enable-enca 全量构建)** | **PASS** |
+| enca-windows(MSYS2 GCC + Clang ASan 独立套件) | PASS |
+
+证据级别说明:job 日志下载需 repo admin(匿名 403),采用步骤级结论作证据——`Smoke test (batch vertical slice)` 步骤在 `set -e` 下成功,该脚本任一 E2E 断言(vertical slice 不全 / 哈希不一致 / 计数漂移 / stale+cooperative≠16 / 新代不活)均会非零退出,故步骤绿 ⇔ ENCA_E2E_OK。构建四阶段信号(checkout→configure→make→smoke)全部独立成步并各自绿。
+
+### P1.11 最终判定表
+
+```text
+P1.11 Minimal Emacs Embedding
+================================
+Build integration (configure/Makefile)   PASS local+cloud
+temacs link + dump generation            PASS local+cloud
+Runtime init/run/shutdown                PASS local+cloud
+Cancellation accounting (14+2=16)        PASS local+cloud
+Generation continuation                  PASS local+cloud
+ENCA disabled == upstream                PASS local(hard assertions)
+Standalone suite regression              PASS local+cloud
+Windows standalone matrix                PASS cloud
+Linux standalone matrix                  PASS cloud
+Emacs --enable-enca build + E2E          PASS cloud
+Emacs --disable-enca build               PASS local(cloud 未单列,默认路径即此)
+
+未覆盖(如实记录):clang 编译的完整 Emacs;W32 GUI Emacs 内嵌;
+AUTO_DEPEND=no 分支;云端禁用路径构建。
+```
+
+**P1 Runtime Foundation + P1.11 Minimal Emacs Embedding → FROZEN**
+tag: `enca-p1.11-minimal-embedding`
+
+下一阶段(P2 Snapshot / State Isolation)另起基准,不在本 tag上演进 API。
+
