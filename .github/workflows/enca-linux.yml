@@ -56,8 +56,11 @@ jobs:
           gcc --version | head -n1
           gcc -std=gnu11 -O0 -g -Wall -Wextra -Werror \
             ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_dbg
-      - name: Run
-        run: ./enca_tests_dbg
+      - name: Run (gdb-wrapped, backtrace on crash)
+        run: |
+          sudo apt-get install -y gdb >/dev/null
+          gdb -q -batch -return-child-result -ex run \
+            -ex "thread apply all bt 12" --args ./enca_tests_dbg
 
   functional-opt:
     runs-on: ubuntu-latest
@@ -68,8 +71,11 @@ jobs:
         run: >
           gcc -std=gnu11 -O2 -g -Wall -Wextra -Werror
           ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_opt
-      - name: Run
-        run: ./enca_tests_opt
+      - name: Run (gdb-wrapped, backtrace on crash)
+        run: |
+          sudo apt-get install -y gdb >/dev/null
+          gdb -q -batch -return-child-result -ex run \
+            -ex "thread apply all bt 12" --args ./enca_tests_opt
 
   asan-lsan:
     runs-on: ubuntu-latest
