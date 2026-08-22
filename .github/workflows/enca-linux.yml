@@ -36,6 +36,7 @@ env:
     src/enca/trace/profiler.c
     src/enca/runtime/runtime.c
     src/enca/snapshot/snapshot.c
+    src/enca/scheduler/scheduler.c
   ENCA_TEST: >-
     test/enca/main.c
     test/enca/test_base.c
@@ -52,6 +53,7 @@ env:
     test/enca/test_trace_perf.c
     test/enca/test_runtime.c
     test/enca/test_snapshot.c
+    test/enca/test_scheduler.c
 
 jobs:
   functional-debug:

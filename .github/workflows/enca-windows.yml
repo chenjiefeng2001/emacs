@@ -50,10 +50,12 @@ jobs:
             ../../src/enca/queue/blocking_queue.c ../../src/enca/cancel/cancel.c `
             ../../src/enca/trace/trace.c ../../src/enca/trace/profiler.c `
             ../../src/enca/runtime/runtime.c `
-            ../../src/enca/snapshot/snapshot.c main.c test_base.c test_id.c `
+            ../../src/enca/snapshot/snapshot.c 
+            ../../src/enca/scheduler/scheduler.c main.c test_base.c test_id.c `
             test_memory.c test_arena.c test_slab.c test_time.c test_thread.c `
             test_queue.c test_event.c test_cancel.c test_cancel_race.c `
-            test_trace_perf.c test_runtime.c test_snapshot.c
+            test_trace_perf.c test_runtime.c test_snapshot.c `
+            test_scheduler.c
       - name: Run ASan suite
         shell: pwsh
         working-directory: test/enca

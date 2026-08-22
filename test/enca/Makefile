@@ -20,7 +20,8 @@ ENCA_SRC = \
 	../../src/enca/trace/trace.c \
 	../../src/enca/trace/profiler.c \
 	../../src/enca/runtime/runtime.c \
-	../../src/enca/snapshot/snapshot.c
+	../../src/enca/snapshot/snapshot.c \
+	../../src/enca/scheduler/scheduler.c
 
 TEST_SRC = \
 	main.c \
@@ -37,7 +38,8 @@ TEST_SRC = \
 	test_cancel_race.c \
 	test_trace_perf.c \
 	test_runtime.c \
-	test_snapshot.c
+	test_snapshot.c \
+	test_scheduler.c
 
 all: enca_tests
 
