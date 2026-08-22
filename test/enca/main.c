@@ -58,6 +58,7 @@ main (void)
   void run_test_queue (void);
   void run_test_event (void);
   void run_test_cancel (void);
+  void run_test_cancel_race (void);
   void run_test_trace_perf (void);
   void run_test_runtime (void);
 
@@ -71,6 +72,7 @@ main (void)
   run_test_queue ();
   run_test_event ();
   run_test_cancel ();
+  run_test_cancel_race ();
   run_test_trace_perf ();
   run_test_runtime ();
 
