@@ -1788,6 +1788,7 @@ if test "$enable_enca" = yes; then
   ENCA_OBJ="$ENCA_OBJ enca/memory/arena.o enca/memory/slab.o"
   ENCA_OBJ="$ENCA_OBJ enca/queue/blocking_queue.o enca/queue/spsc_ring.o"
   ENCA_OBJ="$ENCA_OBJ enca/runtime/runtime.o enca/thread/thread.o"
+  ENCA_OBJ="$ENCA_OBJ enca/snapshot/snapshot.o"
   ENCA_OBJ="$ENCA_OBJ enca/time/clock.o enca/trace/profiler.o"
   ENCA_OBJ="$ENCA_OBJ enca/trace/trace.o"
 fi

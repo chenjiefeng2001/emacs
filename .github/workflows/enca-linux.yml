@@ -35,6 +35,7 @@ env:
     src/enca/trace/trace.c
     src/enca/trace/profiler.c
     src/enca/runtime/runtime.c
+    src/enca/snapshot/snapshot.c
   ENCA_TEST: >-
     test/enca/main.c
     test/enca/test_base.c
@@ -50,6 +51,7 @@ env:
     test/enca/test_cancel_race.c
     test/enca/test_trace_perf.c
     test/enca/test_runtime.c
+    test/enca/test_snapshot.c
 
 jobs:
   functional-debug:

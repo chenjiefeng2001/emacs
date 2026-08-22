@@ -61,6 +61,7 @@ main (void)
   void run_test_cancel_race (void);
   void run_test_trace_perf (void);
   void run_test_runtime (void);
+  void run_test_snapshot (void);
 
   run_test_base ();
   run_test_id ();
@@ -75,6 +76,7 @@ main (void)
   run_test_cancel_race ();
   run_test_trace_perf ();
   run_test_runtime ();
+  run_test_snapshot ();
 
   printf ("\n%d checks, %d failures\n", enca_test_checks,
           enca_test_failures);
