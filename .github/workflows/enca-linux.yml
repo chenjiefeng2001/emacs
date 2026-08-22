@@ -59,8 +59,18 @@ jobs:
       - name: Run (gdb-wrapped, backtrace on crash)
         run: |
           sudo apt-get install -y gdb >/dev/null
+          set -o pipefail
           gdb -q -batch -return-child-result -ex run \
-            -ex "thread apply all bt 12" --args ./enca_tests_dbg
+            -ex "thread apply all bt 12" --args ./enca_tests_dbg 2>&1 |
+            tee run_dbg.log
+          rc=${PIPESTATUS[0]}
+          echo "child_exit=$rc" >> run_dbg.log
+          exit "$rc"
+      - name: Emit annotations
+        if: always()
+        run: |
+          { grep -m 5 "FAIL" run_dbg.log; tail -n 6 run_dbg.log; } |
+            sort -u | while read -r l; do echo "::error::$l"; done
 
   functional-opt:
     runs-on: ubuntu-latest
@@ -74,8 +84,18 @@ jobs:
       - name: Run (gdb-wrapped, backtrace on crash)
         run: |
           sudo apt-get install -y gdb >/dev/null
+          set -o pipefail
           gdb -q -batch -return-child-result -ex run \
-            -ex "thread apply all bt 12" --args ./enca_tests_opt
+            -ex "thread apply all bt 12" --args ./enca_tests_opt 2>&1 |
+            tee run_opt.log
+          rc=${PIPESTATUS[0]}
+          echo "child_exit=$rc" >> run_opt.log
+          exit "$rc"
+      - name: Emit annotations
+        if: always()
+        run: |
+          { grep -m 5 "FAIL" run_opt.log; tail -n 6 run_opt.log; } |
+            sort -u | while read -r l; do echo "::error::$l"; done
 
   asan-lsan:
     runs-on: ubuntu-latest

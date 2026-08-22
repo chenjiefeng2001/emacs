@@ -58,9 +58,27 @@ jobs:
         working-directory: test/enca
         run: |
           $env:ASAN_OPTIONS = 'detect_leaks=0:verbosity=1'
-          $dll = & clang -print-file-name=clang_rt.asan_dynamic-x86_64.dll
-          if (Test-Path $dll) { Copy-Item $dll . }
-          & .\enca_tests_win_asan.exe *>&1 | Tee-Object -FilePath asan_run.log
+          $res = & clang -print-resource-dir
+          $dirs = @((Join-Path $res 'lib/x86_64-pc-windows-msvc'),
+                    (Join-Path $res 'lib/windows'),
+                    'C:\Program Files\LLVM\bin') | Where-Object { Test-Path $_ }
+          foreach ($d in $dirs) {
+            Get-ChildItem "$d\clang_rt*.dll" -ErrorAction SilentlyContinue |
+              ForEach-Object { Copy-Item $_.FullName . }
+            $env:Path = "$d;$env:Path"
+          }
+          "rt_dirs=" + ($dirs -join ';') | Add-Content asan_run.log
+          Get-ChildItem .\clang_rt*.dll -ErrorAction SilentlyContinue |
+            ForEach-Object { "staged_dll=$($_.Name)" } | Add-Content asan_run.log
+          $text = [Text.Encoding]::ASCII.GetString(
+            [IO.File]::ReadAllBytes("$PWD\enca_tests_win_asan.exe"))
+          [regex]::Matches($text, '[A-Za-z0-9_\-]+\.dll') |
+            ForEach-Object { $_.Value } | Sort-Object -Unique |
+            ForEach-Object {
+              "import=$_ local=$(Test-Path ".\$_") sys32=$(Test-Path "$env:SystemRoot\System32\$_")" |
+                Add-Content asan_run.log
+            }
+          & .\enca_tests_win_asan.exe *>&1 | Tee-Object asan_run.log -Append
           $ec = $LASTEXITCODE
           $("exe_exit=$ec (0x{0:X})" -f $ec) | Add-Content asan_run.log
           exit $ec
@@ -87,6 +105,10 @@ jobs:
         run: |
           $lines = @()
           foreach ($f in 'asan_run.log', 'asan_gdb.log') {
-            if (Test-Path $f) { $lines += (Get-Content $f | Select-Object -First 5) }
+            if (Test-Path $f) {
+              $c = Get-Content $f
+              $lines += ($c | Select-Object -First 2)
+              $lines += ($c | Select-Object -Last 5)
+            }
           }
-          foreach ($l in $lines) { Write-Output "::error::$l" }
+          $lines | Select-Object -Unique | ForEach-Object { Write-Output "::error::$_" }
