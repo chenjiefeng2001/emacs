@@ -2490,6 +2490,9 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
       syms_of_profiler ();
       syms_of_pdumper ();
       syms_of_json ();
+#ifdef HAVE_ENCA
+      syms_of_enca ();
+#endif
 
       keys_of_keyboard ();
 
@@ -3107,6 +3110,14 @@ shut_down_emacs (int sig, Lisp_Object stuff)
 
   /* Don't update display from now on.  */
   Vinhibit_redisplay = Qt;
+
+#ifdef HAVE_ENCA
+  /* Join ENCA worker threads before teardown on normal termination.
+     After fatal signals the process is going down regardless, and
+     joining could hang on corrupted state.  */
+  if (sig == 0)
+    enca_glue_shutdown ();
+#endif
 
   /* If we are controlling the terminal, reset terminal modes.  */
 #if !defined DOS_NT && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY)

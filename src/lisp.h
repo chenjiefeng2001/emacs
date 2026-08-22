@@ -4315,6 +4315,12 @@ extern void syms_of_image (void);
 /* Defined in json.c.  */
 extern void syms_of_json (void);
 
+/* Defined in enca-emacs.c.  Only compiled when configured with
+   --enable-enca; callers must guard with HAVE_ENCA.  */
+extern void syms_of_enca (void);
+extern void enca_glue_pump (void);
+extern void enca_glue_shutdown (void);
+
 /* Defined in insdel.c.  */
 extern void move_gap_both (ptrdiff_t, ptrdiff_t);
 extern AVOID buffer_overflow (void);

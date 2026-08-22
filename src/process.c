@@ -5515,6 +5515,14 @@ wait_reading_process_output (intmax_t time_limit, int nsecs, int read_kbd,
 	    }
 	  while (!detect_input_pending ());
 
+#ifdef HAVE_ENCA
+	  /* Pump completed ENCA results while waiting.  This point is
+	     Elisp-safe: timers may have just run right above, so
+	     committing results (which calls Lisp) is equally legal.
+	     Cheap no-op unless the runtime is running with a handler.  */
+	  enca_glue_pump ();
+#endif
+
 	  /* If there is unread keyboard input, also return.  */
 	  if (read_kbd != 0
 	      && requeued_command_events_pending_p ())

@@ -1781,8 +1781,8 @@ if test "$enable_enca" = yes; then
   AC_DEFINE([HAVE_ENCA], [1],
     [Define to 1 if the ENCA runtime foundation is linked into Emacs.])
   dnl Keep in sync with src/Makefile.in: every entry must have a
-  dnl matching source file under src/enca/.
-  ENCA_OBJ='enca/cancel/cancel.o enca/diagnostics/error.o'
+  dnl matching source file under src/enca/ (or be enca-emacs.o).
+  ENCA_OBJ='enca-emacs.o enca/cancel/cancel.o enca/diagnostics/error.o'
   ENCA_OBJ="$ENCA_OBJ enca/event/dispatch.o enca/event/event.o"
   ENCA_OBJ="$ENCA_OBJ enca/id/id.o enca/memory/allocator.o"
   ENCA_OBJ="$ENCA_OBJ enca/memory/arena.o enca/memory/slab.o"
