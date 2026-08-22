@@ -57,6 +57,16 @@ typedef struct enca_store_ops
   enca_usize (*rev_len) (enca_bench_rev *rev);
   void (*dump) (enca_bench_rev *rev);   /* optional debug */
 
+  /* Physical bytes currently held by the store (buffers + tables),
+     for the sharing-ratio metric: logical = sum(len of live revs). */
+  enca_u64 (*physical_bytes) (enca_bench_store *st);
+
+  /* Optional maintenance pass (chunked deferred coalescing).
+     Produces a NEW revision with identical content; caller swaps.
+     Maintenance copy bytes are accumulated in *maint_copied. */
+  enca_result (*maintain) (enca_bench_store *st, enca_bench_rev *cur,
+                           enca_bench_rev **out, enca_u64 *maint_copied);
+
   void (*destroy) (enca_bench_store *st);
 } enca_store_ops;
 
@@ -65,6 +75,10 @@ struct enca_bench_store { const enca_store_ops *ops; };
 
 extern const enca_store_ops enca_store_flat_ops;
 extern const enca_store_ops enca_store_chunked_ops;
+
+/* Chunked tuning (call before create): mode 0=none 1=local 2=deferred;
+   frag_threshold triggers deferred maintenance on avg_len ratio. */
+void enca_store_chunked_configure (int mode, double frag_threshold);
 
 const char *enca_bench_store_family (const enca_bench_store *st);
 

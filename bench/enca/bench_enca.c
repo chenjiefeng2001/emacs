@@ -29,6 +29,13 @@ main (int argc, char **argv)
   const char *wl_name = "W1";
   const char *cs_label = "-";
   const char *label = "";
+  const char *coalesce = "none";
+  double frag_threshold = 2.0;
+  enca_usize maint_every = 0;
+  enca_u64 cold_hold_at = 0, cold_read_at = 0;
+  (void) cold_read_at; /* reserved: delayed read scheduling */
+  enca_u64 edit_size = 0;
+  const char *locality = "append";
   enca_usize chunk_size = 65536;
   enca_usize doc_size = 1u << 20;
   enca_usize n_edits = 200;
@@ -64,6 +71,20 @@ main (int argc, char **argv)
         verify_every = (unsigned) atoi (argv[++i]);
       else if (!strcmp (argv[i], "--seed") && i + 1 < argc)
         seed = strtoull (argv[++i], NULL, 0);
+      else if (!strcmp (argv[i], "--coalesce") && i + 1 < argc)
+        coalesce = argv[++i];
+      else if (!strcmp (argv[i], "--frag-threshold") && i + 1 < argc)
+        frag_threshold = atof (argv[++i]);
+      else if (!strcmp (argv[i], "--maint-every") && i + 1 < argc)
+        maint_every = strtoull (argv[++i], NULL, 0);
+      else if (!strcmp (argv[i], "--cold-hold-at") && i + 1 < argc)
+        cold_hold_at = strtoull (argv[++i], NULL, 0);
+      else if (!strcmp (argv[i], "--cold-read-at") && i + 1 < argc)
+        cold_read_at = strtoull (argv[++i], NULL, 0);
+      else if (!strcmp (argv[i], "--edit-size") && i + 1 < argc)
+        edit_size = strtoull (argv[++i], NULL, 0);
+      else if (!strcmp (argv[i], "--locality") && i + 1 < argc)
+        locality = argv[++i];
       else
         {
           usage ();
@@ -82,10 +103,22 @@ main (int argc, char **argv)
     kind = ENCA_WL_REFACTOR;
   else if (!strcmp (wl_name, "W5"))
     kind = ENCA_WL_BIGFILE_LOCAL;
+  else if (!strcmp (wl_name, "W6"))
+    kind = ENCA_WL_SYNTHETIC;
   else
     {
       usage ();
       return 2;
+    }
+
+  int coalesce_mode = 0;
+  if (!strcmp (family, "chunked"))
+    {
+      if (!strcmp (coalesce, "local"))
+        coalesce_mode = 1;
+      else if (!strcmp (coalesce, "deferred"))
+        coalesce_mode = 2;
+      enca_store_chunked_configure (coalesce_mode, frag_threshold);
     }
 
   const enca_store_ops *ops
@@ -116,12 +149,27 @@ main (int argc, char **argv)
   enca_workload_init (&wl, kind, seed);
   if (!wl.scratch)
     return 1;
+  if (kind == ENCA_WL_SYNTHETIC)
+    {
+      int loc = ENCA_LOC_APPEND;
+      if (!strcmp (locality, "middle"))
+        loc = ENCA_LOC_MIDDLE;
+      else if (!strcmp (locality, "random"))
+        loc = ENCA_LOC_RANDOM;
+      else if (!strcmp (locality, "hot"))
+        loc = ENCA_LOC_HOT;
+      enca_workload_configure_synth (&wl, edit_size, loc);
+    }
+
+  /* Cold-snapshot support: hold one revision aside at cold_hold_at. */
+  enca_bench_rev *cold_rev = NULL;
+  enca_u64 cold_fnv = 0, cold_len = 0;
 
   enca_u64 *lat = malloc ((n_edits ? n_edits : 1) * sizeof *lat);
   enca_bench_rev **ring = calloc (retention ? retention : 1,
                                   sizeof *ring);
   enca_usize ring_head = 0, ring_count = 0;
-  enca_u64 copied_total = 0, meta_total = 0;
+  enca_u64 copied_total = 0, meta_total = 0, maint_copied_total = 0;
   bool ok = true;
 
   for (enca_usize i = 0; i < n_edits; i++)
@@ -157,10 +205,10 @@ main (int argc, char **argv)
                  (unsigned long long) e.position,
                  (unsigned long long) e.delete_len,
                  (unsigned long long) e.insert_len,
-                 ops->rev_len (next),
-                 ops->read_random (cur ? next : next,
-                                 &(enca_u64){0}, 1),
-                 ref[0]);
+                  ops->rev_len (next),
+                  (unsigned) ops->read_random (cur ? next : next,
+                                               &(enca_u64){ 0 }, 1),
+                  ref[0]);
       copied_total += m.content_copy_bytes;
       meta_total += m.meta_bytes;
 
@@ -181,6 +229,29 @@ main (int argc, char **argv)
 
       ops->release (cur);       /* chain ref moves to `next` */
       cur = next;
+
+      /* Cold snapshot: pin a revision at cold_hold_at, read it late. */
+      if (cold_hold_at && i + 1 == cold_hold_at && !cold_rev)
+        {
+          cold_rev = cur;
+          ops->retain (cold_rev);
+          cold_fnv = ops->fnv_sequential (cold_rev);
+          cold_len = ops->rev_len (cold_rev);
+        }
+
+      /* Deferred maintenance pass on the publishing thread. */
+      if (maint_every && coalesce_mode == 2 && ops->maintain
+          && (i + 1) % maint_every == 0)
+        {
+          enca_bench_rev *mt = NULL;
+          enca_u64 mcopied = 0;
+          if (ops->maintain (st, cur, &mt, &mcopied) == ENCA_OK && mt)
+            {
+              maint_copied_total += mcopied;
+              ops->release (cur);
+              cur = mt;         /* same content, compacted layout */
+            }
+        }
 
       if (verify_every && (i + 1) % verify_every == 0
           && ops->fnv_sequential (cur) != enca_fnv1a (ref, ref_len))
@@ -225,6 +296,21 @@ main (int argc, char **argv)
                                     read_ms)
          : 0;
 
+  /* Cold snapshot read (after the loop: maximally "cold"). */
+  double cold_read_ms = -1;
+  int cold_ok = -1;
+  if (cold_rev)
+    {
+      enca_timestamp_ns c0 = enca_monotonic_now_ns ();
+      enca_u64 h = ops->fnv_sequential (cold_rev);
+      cold_read_ms = (double) (enca_monotonic_now_ns () - c0) / 1e6;
+      cold_ok = (h == cold_fnv) && ops->rev_len (cold_rev) == cold_len;
+      ops->release (cold_rev);
+      cold_rev = NULL;
+      fprintf (stderr, "[cold] read=%.4f ms ok=%d\n", cold_read_ms,
+               cold_ok);
+    }
+
   enca_mem_stats mem1 = enca_mem_stats_snapshot ();
   enca_u64 live_delta = mem1.live_bytes - mem0.live_bytes;
 
@@ -233,10 +319,23 @@ main (int argc, char **argv)
   double p99 = enca_bench_pct_ms (lat, n_edits, 99);
   double pmax = enca_bench_pct_ms (lat, n_edits, 100);
 
+  /* Sharing ratio inputs: logical = sum(len of live revisions:
+     ring + cur); physical from the store. */
+  enca_u64 logical = ops->rev_len (cur);
+  for (enca_usize i = 0; i < ring_count; i++)
+    if (ring[i])
+      logical += ops->rev_len (ring[i]);
+  enca_u64 physical
+    = ops->physical_bytes ? ops->physical_bytes (st) : 0;
+  double sharing = physical ? (double) logical / (double) physical : 0;
+  enca_u64 final_hash
+    = ok ? ops->fnv_sequential (cur) : 0;
+
   /* CSV row. */
   printf ("%s,%s,%s,%llu,%llu,%llu,%d,%d,"
           "%.4f,%.4f,%.4f,%.4f,"
-          "%llu,%llu,%llu,%.1f,%s\n",
+          "%llu,%llu,%llu,%.1f,%s,"
+          "%llx,%llu,%llu,%.2f,%llu,%d\n",
           family, cs_label, wl_name,
           (unsigned long long) doc_size,
           (unsigned long long) n_edits,
@@ -246,20 +345,38 @@ main (int argc, char **argv)
           (unsigned long long) copied_total,
           (unsigned long long) meta_total,
           (unsigned long long) live_delta,
-          reader_mbs, label);
+          reader_mbs, label,
+          (unsigned long long) final_hash,
+          (unsigned long long) logical,
+          (unsigned long long) physical,
+          sharing,
+          (unsigned long long) maint_copied_total,
+          cold_ok);
 
   fprintf (stderr,
            "[%s/%s size=%llu edits=%llu ret=%llu readers=%u]\n"
            "  capture ms p50=%.4f p90=%.4f p99=%.4f max=%.4f\n"
            "  copied=%llu meta=%llu live_delta=%llu reader=%0.f MB/s "
-           "ok=%d\n",
-           family, wl_name, (unsigned long long) doc_size,
+           "ok=%d\n"
+           "  final=%llx logical=%llu physical=%llu sharing=%.2f "
+           "maint_copied=%llu cold_ok=%d\n",
+           family, enca_workload_name (kind),
+           (unsigned long long) doc_size,
            (unsigned long long) n_edits,
            (unsigned long long) retention, readers, p50, p90, p99, pmax,
            (unsigned long long) copied_total,
            (unsigned long long) meta_total,
-           (unsigned long long) live_delta, reader_mbs, (int) ok);
+           (unsigned long long) live_delta, reader_mbs, (int) ok,
+           (unsigned long long) final_hash,
+           (unsigned long long) logical,
+           (unsigned long long) physical, sharing,
+           (unsigned long long) maint_copied_total, cold_ok);
 
+  if (cold_rev)
+    {
+      ops->release (cold_rev);
+      cold_rev = NULL;
+    }
   /* Teardown: release ring + chain. */
   for (enca_usize i = 0; i < ring_count; i++)
     if (ring[i])

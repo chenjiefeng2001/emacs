@@ -13,7 +13,16 @@ typedef enum
   ENCA_WL_PASTE = 3,         /* W3: occasional large paste           */
   ENCA_WL_REFACTOR = 4,      /* W4: periodic ~1MB block replace      */
   ENCA_WL_BIGFILE_LOCAL = 5, /* W5: huge doc, edits in mid window    */
+  ENCA_WL_SYNTHETIC = 6,     /* W6: parametric edit-size x locality   */
 } enca_workload_kind;
+
+enum
+{
+  ENCA_LOC_APPEND = 0,
+  ENCA_LOC_MIDDLE = 1,
+  ENCA_LOC_RANDOM = 2,
+  ENCA_LOC_HOT = 3,
+};
 
 typedef struct enca_workload
 {
@@ -23,6 +32,8 @@ typedef struct enca_workload
   enca_prng prng;
   long step;
   enca_u64 cursor;              /* W1 hot-region drift state         */
+  enca_u64 synth_edit_size;     /* W6                                */
+  int synth_locality;           /* W6: ENCA_LOC_*                    */
 } enca_workload;
 
 static inline void
@@ -44,6 +55,14 @@ enca_workload_init (enca_workload *w, enca_workload_kind kind,
   enca_prng_seed (&w->prng, seed * 6364136223846793005ull + 1442695040888963407ull);
 }
 
+static inline void
+enca_workload_configure_synth (enca_workload *w, enca_u64 edit_size,
+                               int locality)
+{
+  w->synth_edit_size = edit_size;
+  w->synth_locality = locality;
+}
+
 static const char *
 enca_workload_name (enca_workload_kind k)
 {
@@ -53,6 +72,7 @@ enca_workload_name (enca_workload_kind k)
     case ENCA_WL_TYPING: return "W2-typing";
     case ENCA_WL_PASTE: return "W3-paste";
     case ENCA_WL_REFACTOR: return "W4-refactor";
+    case ENCA_WL_SYNTHETIC: return "W6-synthetic";
     case ENCA_WL_BIGFILE_LOCAL: return "W5-bigfile-local";
     }
   return "W?";
@@ -184,6 +204,38 @@ enca_workload_next (enca_workload *w, enca_usize cur_size,
             fill_pattern (w->scratch, n, p, w->step);
             e->insert_len = n;
             e->position = enca_prng_range (p, cur_size);
+          }
+        break;
+      }
+
+    case ENCA_WL_SYNTHETIC:
+      {
+        /* Parametric edit-size x locality (P2.1.5 sweeps). */
+        enca_u64 n = w->synth_edit_size ? w->synth_edit_size : 1;
+        if (n > sizeof w->scratch)
+          n = sizeof w->scratch;
+        fill_pattern (w->scratch, n, p, w->step);
+        e->insert_len = n;
+        switch (w->synth_locality)
+          {
+          case ENCA_LOC_APPEND:
+            e->position = cur_size;
+            break;
+          case ENCA_LOC_MIDDLE:
+            e->position = cur_size / 2;
+            break;
+          case ENCA_LOC_RANDOM:
+            e->position = enca_prng_range (p, cur_size);
+            break;
+          default: /* HOT */
+            {
+              enca_u64 base = cur_size / 2;
+              e->position = base
+                            - (base > 4096 ? 4096 : base)
+                            + enca_prng_range (p, 8192);
+              if (e->position > cur_size)
+                e->position = cur_size;
+            }
           }
         break;
       }

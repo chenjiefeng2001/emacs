@@ -4,6 +4,10 @@
 
 #include "store.h"
 
+#include <stdatomic.h>
+
+static _Atomic enca_u64 flat_live_bytes;
+
 typedef struct
 {
   enca_bench_store base;
@@ -52,6 +56,7 @@ flat_snapshot_init (enca_bench_store *bst, const unsigned char *init,
 
   m->content_copy_bytes = n;
   m->meta_bytes = sizeof *r;
+  atomic_fetch_add (&flat_live_bytes, n);
 
   *out = &r->base;
   return ENCA_OK;
@@ -84,6 +89,7 @@ flat_publish (enca_bench_store *bst, enca_bench_rev *prev,
       return ENCA_ERR_OUT_OF_MEMORY;
     }
   r->len = newlen;
+  atomic_fetch_add (&flat_live_bytes, newlen);
 
   /* Single pass: prefix, skip deleted range, insert, suffix. */
   memcpy (r->data, p->data, pos);
@@ -112,6 +118,7 @@ flat_release (enca_bench_rev *rev)
   flat_rev *r = (flat_rev *) rev;
   if (atomic_fetch_sub (&r->refs, 1) == 1)
     {
+      atomic_fetch_sub (&flat_live_bytes, r->len);
       enca_free (r->data);
       enca_free (r);
     }
@@ -141,6 +148,16 @@ flat_rev_len (enca_bench_rev *rev)
   return ((flat_rev *) rev)->len;
 }
 
+static enca_u64
+flat_physical (enca_bench_store *st)
+{
+  /* Flat tracks live bytes via the mem stats wrapper in the
+     harness; store-side accounting is trivially the sum of live
+     revision buffers, maintained incrementally. */
+  (void) st;
+  return flat_live_bytes;
+}
+
 static void
 flat_dump (enca_bench_rev *rev)
 {
@@ -164,5 +181,7 @@ const enca_store_ops enca_store_flat_ops = {
   flat_read_random,
   flat_rev_len,
   flat_dump,
+  flat_physical,
+  NULL, /* maintain */
   flat_destroy,
 };
