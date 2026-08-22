@@ -68,20 +68,17 @@ replacer_retain (void *arg)
   for (int i = 0; i < RACE_REPLACES; i++)
     {
       enca_mutex_lock (&c->slot_lock);
+
       enca_cancel_source *old = atomic_exchange_explicit (&c->slot, NULL,
                                                           memory_order_acq_rel);
-      enca_mutex_unlock (&c->slot_lock);
-
       enca_cancel_source_cancel (old);
       enca_cancel_source_release (old);
 
       enca_cancel_source *fresh = NULL;
       if (enca_cancel_source_create (&fresh) == ENCA_OK)
-        {
-          enca_mutex_lock (&c->slot_lock);
-          atomic_store_explicit (&c->slot, fresh, memory_order_release);
-          enca_mutex_unlock (&c->slot_lock);
-        }
+        atomic_store_explicit (&c->slot, fresh, memory_order_release);
+
+      enca_mutex_unlock (&c->slot_lock);
     }
   return ENCA_OK;
 }
