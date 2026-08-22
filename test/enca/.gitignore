@@ -1,0 +1,7 @@
+enca_tests
+enca_tests.exe
+enca_tests_asan*
+enca_tests_gcc*
+trace-dump-test.json
+rt_out*.txt
+rt_err*.txt
