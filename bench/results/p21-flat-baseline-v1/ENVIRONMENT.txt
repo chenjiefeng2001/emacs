@@ -1,0 +1,13 @@
+﻿# P2.1 flat baseline v1 -- FROZEN
+date: 2026-08-23 05:17 +08:00
+commit: 9ad50d676f94b1cc65ac4440f0e9a27d1cf22bcb
+compiler: gcc.exe (Rev2, Built by MSYS2 project) 14.2.0
+optimization: -O2 (single-file TU set, see bench/enca/Makefile)
+cpu: 12th Gen Intel(R) Core(TM) i7-12700H
+os: Microsoft Windows 11 专业版 Insider Preview build 29639
+seed_policy: --seed 42 everywhere; PRNG xorshift64* (deterministic)
+workload_hash_note: generators frozen in bench/enca/workloads.h at this commit
+notes: >
+  Baseline of P2.0 flat store vs chunked v1 (piece-table, NO coalescing).
+  copied_total for flat equals doc_size x edits exactly (cost model confirmed).
+  All future optimizations must quote improvement relative to THIS file.
