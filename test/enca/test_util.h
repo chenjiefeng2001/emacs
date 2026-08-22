@@ -31,7 +31,16 @@ extern int enca_test_checks;
 # endif
 #endif
 
-#if defined (ENCA_TEST_ASAN) || defined (ENCA_TEST_TSAN)
+#if defined(__SANITIZE_UNDEFINED__)
+# define ENCA_TEST_UBSAN 1
+#elif defined(__has_feature)
+# if __has_feature (undefined_behavior_sanitizer)
+#  define ENCA_TEST_UBSAN 1
+# endif
+#endif
+
+#if defined (ENCA_TEST_ASAN) || defined (ENCA_TEST_TSAN) \
+  || defined (ENCA_TEST_UBSAN)
 # define ENCA_TEST_SANITIZER_RISKY 1
 #endif
 

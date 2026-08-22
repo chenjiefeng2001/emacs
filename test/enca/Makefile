@@ -52,7 +52,8 @@ asan:
 	./enca_tests_asan
 
 ubsan:
-	$(CC) -std=c23 -O1 -g -fsanitize=undefined -fno-omit-frame-pointer \
+	$(CC) -std=c23 -O1 -g -fsanitize=undefined -fno-sanitize-recover=all \
+		-fno-omit-frame-pointer -DENCA_TEST_UBSAN=1 \
 		-Wall -Wextra $(INCLUDES) \
 		-o enca_tests_ubsan $(ENCA_SRC) $(TEST_SRC)
 	./enca_tests_ubsan

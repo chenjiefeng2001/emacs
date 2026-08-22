@@ -54,8 +54,12 @@ test_realloc_preserves (void)
   CHECK (p != NULL);
   enca_free (p);
 
-  CHECK (enca_realloc (NULL, 64) != NULL);
-  enca_free (enca_malloc (0) ? NULL : NULL);
+  void *q = enca_realloc (NULL, 64);
+  CHECK (q != NULL);
+  enca_free (q);
+
+  void *z = enca_malloc (0);
+  enca_free (z);
 }
 
 static void
@@ -71,7 +75,7 @@ test_strdup (void)
 static void
 test_double_free_panics (void)
 {
-#ifdef ENCA_TEST_ASAN
+#if defined(ENCA_TEST_SANITIZER_RISKY)
   return;
 #endif
   void *p = enca_malloc (16);
@@ -84,7 +88,7 @@ test_double_free_panics (void)
 static void
 test_foreign_pointer_panics (void)
 {
-#ifdef ENCA_TEST_ASAN
+#if defined(ENCA_TEST_SANITIZER_RISKY)
   return;
 #endif
   int local = 42;

@@ -94,6 +94,7 @@ jobs:
         run: >
           gcc -std=gnu11 -O1 -g -fsanitize=undefined
           -fno-sanitize-recover=all -fno-omit-frame-pointer
+          -DENCA_TEST_UBSAN=1
           ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_ubsan
       - name: Run
         run: ./enca_tests_ubsan

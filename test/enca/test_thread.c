@@ -25,7 +25,14 @@ test_thread_create_join (void)
                 ENCA_OK);
   CHECK_EQ_U64 (enca_thread_join (&t), ENCA_OK);
   CHECK_EQ_U64 (atomic_load (&shared_counter), 10000);
-  CHECK (t.native == NULL);
+  {
+    const unsigned char *p = (const unsigned char *) &t.native;
+    bool zeroed = true;
+    for (size_t i = 0; i < sizeof t.native; i++)
+      if (p[i] != 0)
+        zeroed = false;
+    CHECK (zeroed);
+  }
 }
 
 static void
