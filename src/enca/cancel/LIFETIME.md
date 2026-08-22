@@ -60,9 +60,9 @@ observes NULL / the fresh source afterwards.
 `test/enca/test_cancel_race.c` contains two suites:
 
 - `cancel-race/borrow-unretained`: intentionally reproduces the
-  forbidden pattern as a canary.  It is skipped in ASan builds unless
-  `ENCA_TEST_FORCE_RACE_CANARY` is defined; building with that macro
-  plus `-fsanitize=address` must yield a heap-use-after-free report,
-  proving detector sensitivity.
+  forbidden pattern as a canary.  It is skipped in sanitizer builds
+  (ASan/TSan) unless `ENCA_TEST_FORCE_RACE_CANARY` is defined; building
+  with that macro plus `-fsanitize=address` must yield a
+  heap-use-after-free report, proving detector sensitivity.
 - `cancel-race/retain-on-load`: hammers the sanctioned protocol and
   must stay clean under ASan.

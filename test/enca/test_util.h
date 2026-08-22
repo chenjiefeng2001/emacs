@@ -23,6 +23,18 @@ extern int enca_test_checks;
 # endif
 #endif
 
+#if defined(__SANITIZE_THREAD__)
+# define ENCA_TEST_TSAN 1
+#elif defined(__has_feature)
+# if __has_feature (thread_sanitizer)
+#  define ENCA_TEST_TSAN 1
+# endif
+#endif
+
+#if defined (ENCA_TEST_ASAN) || defined (ENCA_TEST_TSAN)
+# define ENCA_TEST_SANITIZER_RISKY 1
+#endif
+
 #define CHECK(cond) \
   do \
     { \

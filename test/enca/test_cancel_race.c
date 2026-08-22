@@ -173,7 +173,7 @@ run_race (race_ctx *c, race_thread_fn replacer, race_thread_fn reader,
 static void
 test_borrow_unretained (void)
 {
-#if defined(ENCA_TEST_ASAN) && !defined(ENCA_TEST_FORCE_RACE_CANARY)
+#if defined(ENCA_TEST_SANITIZER_RISKY) && !defined(ENCA_TEST_FORCE_RACE_CANARY)
   (void) 0;
 #else
   race_ctx c;
