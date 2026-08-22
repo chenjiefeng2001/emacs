@@ -30,12 +30,44 @@ build-flags: gcc -std=gnu11 -O1 -Wall -Wextra -D_WIN32_WINNT=0x0601
 - sh:WSL bash 实跑,确认无编译器/无 make 时回退行为正确(`compiler-c: unknown`、build-flags 兜底),验证后清理产物;
 - 全仓 `<fill` 检索:剩余匹配仅为脚本内最后兜底字符串,记录文件中已无占位符。
 
-## 5. 当前仓库状态
-- 分支 `master` 与 `origin/master` 同步,**无任何已跟踪文件被修改**(diff 为空);
-- untracked 仅 3 个顶层目录:`bench/`、`src/enca/`、`test/enca/`;
-- `test/enca/` 下残留运行产物 `rt_out.txt`/`rt_err.txt`(过期)与本次验证的 `rt_out2.txt`/`rt_err2.txt`,均不在 `.gitignore` 内。
+## 5. 当前仓库状态(2026-08-22 收尾更新)
+- `master` 领先 `origin/master` 12 个本地提交(未推送),按序:
+  `add runtime foundation` → `add runtime test suite` → `add baseline benchmark tooling` → `enforce cancel source ownership` → `remove unused worker result` → `add cancellation lifetime race regression test` → `add sanitizer test targets` → `add runtime architecture contract` → `freeze P1 runtime foundation baseline` → `add linux/windows sanitizer ci` → `track ci workflows ignored by upstream dotdir rule` → 本报告;
+- 注意:上游 `.gitignore` 的 `makefile`、`[0-9]*.txt`、`.*` 规则会吞掉子项目文件,已在 `test/enca/.gitignore`、`bench/.gitignore` 加否定,`.github/` 用 `git add -f` 纳入。
 
 ## 6. 遗留事项与建议
-1. **ASan 验证未做**:stale-drop 曾出现 61≠50 的计数偏差,疑似 `advance_generation` 释放旧 cancel source 与 worker 无引用地并发读取之间存在 UAF 窗口(仅为假设);建议跑 `make -C test/enca asan` 复核。
-2. 清理或 gitignore `rt_out*.txt`/`rt_err*.txt`。
-3. 三个目录是否纳入版本控制待定;若日后真正 configure Emacs,重跑 `baseline.ps1` 会自动记录 configure-options。
+1. 若日后真正 configure Emacs,重跑 `baseline.ps1` 会自动记录 configure-options。
+2. baseline 记录可按评审建议扩展 arch/sanitizer/runtime 配置等字段。
+
+## 7. P1.10.5 Correctness Closure(2026-08-22)
+
+按评审清单 [1]–[6] 执行,[7]–[11] 如实标注状态:
+
+### 已证实缺陷并修复
+- **UAF 假设 → 硬证据**:新增 `test/enca/test_cancel_race.c`。`cancel-race/borrow-unretained` 套件复刻 worker 裸借用 `gen_cancel` 的模式,在 clang 19 + ASan 下稳定复现:
+  ```
+  ERROR: AddressSanitizer: heap-use-after-free
+    READ in enca_cancel_source_is_cancelled (cancel.h:31)
+    freed by enca_cancel_source_release (cancel.c:44)
+  ```
+- **修复(retain-on-load)**:`generation_cancelled` 改为在 `state_lock` 内加载并 retain 自己的引用,用完即 release;与 `advance_generation` 的替换临界区互斥。契约文档落盘于 `src/enca/cancel/LIFETIME.md`(ownership 模型、发布协议、禁止模式、canary 说明)。
+- **回归防线**:`cancel-race/borrow-unretained` 作为永久 canary(常规构建参与压力运行;ASan 构建默认跳过,`ENCA_TEST_FORCE_RACE_CANARY` 可强制包含以验证检测灵敏度);`cancel-race/retain-on-load` 锤击安全协议,必须保持干净。
+
+### 验证结果
+| 构建 | 结果 |
+|---|---|
+| gcc `-O1` 常规 | 12087 checks, 0 failures |
+| clang ASan 全套 | 12073 checks, 0 failures(差值 = 被跳过的 canary 检查数) |
+
+### 工具链事实
+- Windows 上 `ASAN_OPTIONS=detect_leaks=1` 使 ASan 运行时直接致命退出(套件不执行):本平台无 LSan;
+- 本机 clang 19 发行版的 UBSan 运行时缺内部符号(`__coe_win::*`),无法链接;Makefile 已提供 `ubsan` 目标供 Linux 使用。
+
+### 门禁状态
+- [x] CancelSource 生命周期复现 → 修复 → ASan 干净
+- [x] Runtime Contract 落盘(`src/enca/ARCHITECTURE.md`,10 条不可违反 invariant,P1.10.7 启动)
+- [x] 基线冻结:`bench/baseline/2026-08-22-runtime-foundation.txt`(P1 Runtime Foundation 基准,后续阶段另建新基准)
+- [x] canary 跳过守卫泛化为 ASan+TSan(`ENCA_TEST_SANITIZER_RISKY`)
+- [~] Linux CI 工作流已落盘:`enca-linux.yml`(functional-debug/-opt、ASan+LSan、UBSan、TSan[初始 continue-on-error])、`enca-windows.yml`(MSYS2 gcc 功能套件 + clang ASan),**待首次 runner 实跑验证**
+- [ ] UBSan / TSan / LSan 实际转绿(依赖 CI 首跑,预期可能暴露首批真实发现)
+- [ ] Shutdown/stale-result 参数化长跑(Nightly 级,CI 化后添加)
