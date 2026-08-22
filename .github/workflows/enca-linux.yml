@@ -5,11 +5,17 @@ on:
     paths:
       - 'src/enca/**'
       - 'test/enca/**'
+      - 'src/enca-emacs.c'
+      - 'configure.ac'
+      - 'src/Makefile.in'
       - '.github/workflows/enca-*.yml'
   pull_request:
     paths:
       - 'src/enca/**'
       - 'test/enca/**'
+      - 'src/enca-emacs.c'
+      - 'configure.ac'
+      - 'src/Makefile.in'
   workflow_dispatch:
 
 env:
@@ -141,3 +147,70 @@ jobs:
           ${{ env.ENCA_SRC }} ${{ env.ENCA_TEST }} -o enca_tests_tsan
       - name: Run
         run: ./enca_tests_tsan
+
+  emacs-build:
+    ## P1.11 gate: full Emacs links with --enable-enca and the minimal
+    ## embedding passes a batch vertical slice (submit -> worker ->
+    ## pump -> handler -> shutdown).
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake pkg-config texinfo libncurses-dev >/dev/null
+      - name: autogen + configure (--enable-enca, headless)
+        run: |
+          ./autogen.sh
+          ./configure --enable-enca --without-x --without-all \
+            --disable-build-details CFLAGS='-O1 -g'
+          grep -E '^#define HAVE_ENCA' src/config.h
+      - name: Build temacs + emacs
+        run: make -j"$(nproc)"
+      - name: Smoke test (batch vertical slice)
+        run: |
+          set -e
+          ./src/emacs --batch --eval '
+            (progn
+              (unless (eq (enca-available-p) t)
+                (error "enca not available"))
+              (let* ((results nil)
+                     (handler (lambda (_src seq gen val)
+                                (push (list seq gen val) results))))
+                (enca-set-handler handler)
+                ;; Phase 1: small tasks, wait for all results.
+                (dotimes (_i 8) (enca-submit "hello enca"))
+                (let ((deadline (+ (float-time) 10.0)))
+                  (while (and (< (length results) 8)
+                              (< (float-time) deadline))
+                    (sleep-for 0.05)
+                    (enca-poll))
+                  (unless (= (length results) 8)
+                    (error "vertical slice incomplete: %d" (length results)))
+                  (let ((vals (mapcar (lambda (r) (nth 2 r)) results)))
+                    (unless (apply (function =) vals)
+                      (error "hash mismatch across workers: %S" vals))))
+                (message "phase1 ok: %S" (car results))
+                ;; Phase 2: in-flight batch then cancel; every pre-cancel
+                ;; task must land in exactly one of {stale, cancelled}.
+                (dotimes (_i 16) (enca-submit (make-string 200000 ?x)))
+                (enca-cancel)
+                (sleep-for 0.5)
+                (enca-poll 256)
+                (let ((st (enca-status)))
+                  (message "post-cancel status: %S" st)
+                  (unless (= (aref st 3) 8)
+                    (error "committed drifted: %s (want 8)" (aref st 3)))
+                  (unless (= (+ (aref st 4) (aref st 5)) 16)
+                    (error "pre-cancel tasks not accounted: stale=%s cancelled=%s"
+                           (aref st 4) (aref st 5))))
+                ;; Phase 3: fresh generation accepts new work.
+                (enca-submit "fresh work")
+                (sleep-for 0.3)
+                (enca-poll 64)
+                (unless (= (aref (enca-status) 3) 9)
+                  (error "post-cancel commit missing"))
+                (enca-shutdown)
+                (princ "ENCA_E2E_OK\n" (function external-debugging-output))))'
