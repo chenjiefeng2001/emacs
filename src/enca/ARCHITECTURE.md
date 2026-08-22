@@ -5,6 +5,36 @@ This file lists invariants that must never be violated.  It records
 optimization that conflicts with this contract requires an explicit,
 written amendment here first.
 
+## North Star -- Vertical Value Gate (2026-08-23)
+
+ENCA exists to make real Emacs user paths approach modern IDE
+performance benchmarks (editing response, redisplay, completion, LSP,
+large buffers).  It is NOT a goal to build a standalone general-purpose
+async runtime.
+
+Hard constraints:
+
+1. Every ENCA subsystem must name the concrete user-perceivable path
+   it improves (editing / redisplay / completion / LSP / large-buffer /
+   multi-window).  A subsystem that cannot answer pauses until it can.
+2. Development runs on two tracks: Track A (substrate: runtime,
+   snapshot, scheduler, memory, trace) may grow only far enough to
+   support Track B; Track B (real Emacs performance paths) is measured
+   continuously and its bottlenecks drive Track A.  Infrastructure
+   never leads; user paths pull it.
+3. The final benchmark is the Emacs user path (e.g. keypress ->
+   visible result), never an ENCA-internal metric alone.  Internal
+   metrics (queue latency, sharing ratio, waste ratio) are diagnostic
+   instruments on that path, not ends in themselves.
+4. Policy layers (StoragePolicy, AdmissionPolicy, ...) stay minimal
+   and evidence-driven; a new policy layer requires benchmark evidence
+   that the simpler one is insufficient.
+
+Current vertical slice target: **EVS-1 Emacs Interactive Vertical
+Slice** -- keypress -> buffer mutation -> capture -> snapshot ->
+scheduler -> worker -> result -> commit -> visible effect, measured
+end to end.
+
 1. Emacs objects may only be accessed by the interpreter/main thread.
 
 2. ENCA worker threads operate only on native immutable inputs.

@@ -1,9 +1,28 @@
 # P3 Scheduler -- Semantic Contract
 
-Status: **P3.0 CONTRACT FREEZE.**  No scheduler code exists yet; this
-document is written first, per the project rule proven by P1.10.5 and
-re-proven by P2.1.5: freeze the lifetime/semantics contract, then make
-the implementation obey it.
+Status: **P3.0 contract frozen; route COMPRESSED by the 2026-08-23
+direction calibration (ARCHITECTURE.md "North Star").**
+
+The scheduler is NOT a general-purpose task runtime.  It exists to
+serve one concrete vertical: **EVS-1 Emacs Interactive Vertical Slice**
+(keypress -> capture -> snapshot -> schedule -> worker -> commit ->
+visible effect, measured end to end).  Scope after P3.2 is conditional:
+phases below P3.2 exist only if the EVS-1 benchmark shows this minimal
+scheduler is the bottleneck.
+
+## 0.1 Compressed route
+
+```
+P3.1  Minimal Task + Admission        (unit-tested decisions)
+P3.2  Minimal Scheduler               (4 queues + N workers, gates)
+EVS-1 Emacs Interactive Vertical Slice + real end-to-end benchmark
+      -> bottleneck analysis decides whether any further P3 phase exists
+(P3.3+ fairness/scaling/adaptive work: only on EVS-1 evidence)
+```
+
+Everything in sections 1-12 remains the semantic contract that P3.1
+and P3.2 must obey; sections describing deeper machinery are
+aspirational and require re-approval plus EVS-1 evidence.
 
 ## 0. What P3 is -- and is not
 
@@ -201,19 +220,14 @@ per-queue counters), stop dispatch, join workers, let executing tasks
 finish or observe cooperative cancellation, run SYSTEM tasks that
 remain.  No queued user task survives shutdown.
 
-## 11. Sub-phase route
+## 11. Sub-phase route (compressed 2026-08-23 -- see section 0.1)
 
 | Phase | Content | Gate |
 |---|---|---|
-| P3.0 | this contract (+ ARCHITECTURE #20-#24) | approved |
-| P3.1 | task model + admission skeleton, unit tests | admission decisions unit-verified |
-| P3.2 | basic scheduler: 4 queues + N workers, dispatch gate | S1/S2 green |
-| P3.3 | supersession + stale elimination | S3 shows drops before execution |
-| P3.4 | deadline handling + cancellation storm safety | S6 green |
-| P3.5 | mixed workload benchmark harness | S4 numbers recorded |
-| P3.6 | fairness/tail-latency report | histograms published |
-| P3.7 | scaling study | S5 across 1..32 workers |
-| P3.8 | decision: basic enough, or escalate | written verdict |
+| P3.1 | task model + admission engine (supersession, expiry), unit tests | admission decisions unit-verified |
+| P3.2 | minimal scheduler: 4 queues + N workers + dispatch gates | S1/S2 green; suite green |
+| EVS-1 | Emacs interactive vertical slice + end-to-end keypress benchmark | numbers recorded; bottleneck analysis written |
+| (conditional) | deeper scheduling work ONLY if EVS-1 names this scheduler as a measured bottleneck | new contract amendment |
 
 Benchmark definitions S1-S7 (S1 single-task cost, S2 burst, S3
 interactive burst with revisions, S4 mixed classes, S5 worker-count

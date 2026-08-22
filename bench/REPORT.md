@@ -432,3 +432,31 @@ C1 eager 被证伪(延迟 3×、物理内存 +65%——合并副本滞留保留�
 P3.1 Task 模型+Admission 骨架 → P3.2 基础调度器(4 队列+N worker)→ P3.3 Supersession+stale 消除 → P3.4 Deadline+cancellation storm → P3.5 混合负载基准(S4)→ P3.6 公平性/tail 报告 → P3.7 扩展性研究(S5,1–32 workers)→ P3.8 决策(基础版是否足够)。
 基准 S1–S7 定义随契约一并冻结(单任务成本/突发/交互修订突发/混合/饱和/取消风暴/shutdown 风暴)。
 
+
+
+## 14. 方向校准与 P3.1 落地(2026-08-23)
+
+### 14.1 方向校准(评审裁决,即刻生效)
+诊断:近期工作出现「ENCA 从 Emacs 性能重构实验平台滑向独立通用异步 Runtime」的轻度漂移(P2.1 合理;P3.0 起风险显现)。修正为**双轨模型 + Vertical Value Gate**(已写入 ARCHITECTURE.md「North Star」节):
+
+1. 每个 ENCA 子系统必须指认其改善的真实用户可感知路径(编辑/redisplay/补全/LSP/大缓冲/多窗口),答不出即暂停;
+2. Track A(底座)只允许生长到支撑 Track B 的程度;Track B(真实 Emacs 性能路径)持续测量,其瓶颈反向驱动 Track A——基础设施不再先行;
+3. 最终基准是 Emacs 用户路径(如 keypress→可见结果),ENCA 内部指标只是该路径上的诊断仪器;
+4. 新增 Policy 层必须有证据表明更简单的方案不够。
+
+对应关系表:Snapshot↔后台分析一致性;Scheduler↔补全/解析/诊断响应;Cancellation↔过期补全;StoragePolicy↔大文件快照;Trace↔延迟诊断。
+
+### 14.2 P3 路线压缩(SCHEDULER.md §0.1/§11 已修订)
+```
+P3.1 最小 Task+Admission(本轮) → P3.2 最小调度器 → EVS-1 Emacs Interactive Vertical Slice(keypress 端到端基准) → 瓶颈分析 → 决定 P3.3 是否存在(允许不存在)
+```
+公平性/扩展性/自适应等深水区全部改为 EVS-1 证据驱动。
+
+### 14.3 P3.1 落地(本轮实现)
+- `src/enca/scheduler/{scheduler.h,scheduler.c}`:任务记录十要素、四类 FIFO 队列、Admission 引擎(SYSTEM 恒收 / MAINTENANCE FIFO / INTERACTIVE·BACKGROUND 按 #23 超越规则 REPLACE+FOLD)、提交期 DOA-deadline 门、派发期 generation×revision×deadline 三重门、DROP 计数族、shutdown drain;
+- 单测 +53 checks:A1/A2 类内 FIFO 与类优先序、A3 REPLACE、A4 FOLD、域隔离(跨文档/跨类不取代)、G1/G4 两级 deadline 门、G3 revision oracle 门、snapshot 释放钩子全路径、shutdown 清场;
+- 全量:12350 checks / 0 failures ×3 连跑(Windows gcc -O1);接线含 Makefile/CI 双列表/configure.ac ENCA_OBJ。
+
+### 14.4 下一步
+P3.2 最小调度器(worker 线程 + 执行 + 结果回流,S1/S2 门禁)→ **EVS-1**(Emacs 键入→捕获→调度→执行→回调→可见,端到端 keypress→result 基准)。EVS-1 数据出来前,P3.3+ 不存在。
+
