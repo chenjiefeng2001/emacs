@@ -699,3 +699,35 @@ B2 ? B1 ≈ 77ms    → clangd 处理,占 candidate-ready 的 >99%
 
 ### 21.5 下一步
 EVS-4.4:commit → candidate 转换 → completion-table → popup → redisplay → visible 的逐段归因。按 §5 GO-UI 规则,若 commit→visible 主导尾部延迟,主战场正式转移到 Emacs UI/redisplay。
+
+
+
+## 22. EVS-4.4 Closure — UI Critical Path Attribution(2026-08-24)
+
+### 22.1 契约(`bench/enca/evs4/UI_ATTRIBUTION.md`)
+T0–T12 时间点、四臂(A0 synthetic / A1 real / A2 worker-built model / A3 worker-built popup model)、R 阶梯(R0–R4)、以及**预冻结的 Render Snapshot 形状**(worker 产不可变快照,主线程 validate→swap→damage→redisplay)——供未来分支 B 触发时直接使用,避免二次设计辩论。
+
+### 22.2 Completion transformation(T6→T7,真实 Emacs 数据结构)
+| 候选数 | all-completions p50 |
+|---|---|
+| 10 / 100 | 0.011–0.023ms |
+| 1K | 0.056–0.064ms |
+| 10K | 0.27–0.46ms |
+| **100K** | **6.4ms**(唯一越线格) |
+
+### 22.3 Redisplay 阶梯(tty,强制重绘,含终端输出)
+| 格 | p50 |
+|---|---|
+| R0 无弹窗基线 | 0.033ms |
+| R2 popup overlay(1/10/50 行)| **1.57–2.04ms** |
+
+popup redisplay 相对基线 ~60×,但绝对值仅 ~2ms。
+
+### 22.4 判定
+- **分支 B(redisplay 重构)不触发**:2ms 绝对值远低于任何重构证据门槛;EVS-5 Render Snapshot **无据启动,关闭**;
+- 分支 A 仅在病态 100K 候选表出现;
+- candidate-ready→visible ≈ **~2ms(tty)**,GUI 会话预计更低;
+- keypress→visible 的主导项仍是 **clangd 后端 78–92ms**(§21)——ENCA 全链路(capture+snapshot+scheduler+wakeup+transport)合计 <0.1ms。
+
+### 22.5 项目级结论(证据链闭合)
+现代 IDE 差距不在 Emacs 边界、不在 JSON/IPC、不在 snapshot/scheduler/runtime,而在 (1) LSP backend 本身与 (2) 真实 completion UI 的集成质量。ENCA 已把「Emacs 自身可控的部分」压到微秒~亚毫秒级并全部冻结;后续任何优化必须先在 keypress→visible 上指认其毫秒级贡献,否则不做。
