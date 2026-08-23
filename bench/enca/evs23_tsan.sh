@@ -12,10 +12,11 @@ gcc -std=gnu2x -O1 -g -fsanitize=thread -fno-omit-frame-pointer \
     "$SRC/cancel/cancel.c" "$SRC/trace/trace.c" "$SRC/trace/profiler.c" \
     "$SRC/runtime/runtime.c" "$SRC/snapshot/snapshot.c" \
     "$SRC/scheduler/scheduler.c" "$SRC/wake/wake.c" \
+    "$SRC/completion/completion.c" \
     main.c test_base.c test_id.c test_memory.c test_arena.c test_slab.c \
     test_time.c test_thread.c test_queue.c test_event.c test_cancel.c \
     test_cancel_race.c test_trace_perf.c test_runtime.c test_snapshot.c \
-    test_scheduler.c test_wake.c test_dstate.c
+    test_scheduler.c test_wake.c test_completion.c test_dstate.c
 TSAN_OPTIONS="halt_on_error=0 second_deadlock_stack=1" /tmp/enca_tsan > /tmp/tsan_out.txt 2>&1
 rc=$?
 echo "RUN_RC=$rc"

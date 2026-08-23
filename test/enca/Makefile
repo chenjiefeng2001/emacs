@@ -22,6 +22,7 @@ ENCA_SRC = \
 	../../src/enca/runtime/runtime.c \
 	../../src/enca/snapshot/snapshot.c \
 	../../src/enca/scheduler/scheduler.c \
+	../../src/enca/completion/completion.c \
 	../../src/enca/wake/wake.c
 
 TEST_SRC = \
@@ -42,6 +43,7 @@ TEST_SRC = \
 	test_snapshot.c \
 	test_scheduler.c \
 	test_wake.c \
+	test_completion.c \
 	test_dstate.c
 
 all: enca_tests
