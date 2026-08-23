@@ -125,3 +125,38 @@ vertical slice re-run of E1/E3/E4.
 | EVS-2.2 | src backend integration behind existing APIs | suite green |
 | EVS-2.3 | enca-evs adapter + E1/E3/E4 re-run | keypress tail improved at scale |
 | EVS-2.4 | decision record + tag | written verdict |
+
+## 10.1 EVS-2.2 scope ruling (2026-08-23)
+
+EVS-2.2 embeds the VALIDATED experiment model as a formal P2 backend;
+it does NOT promote piece-table to an architectural commitment.
+
+Frozen for this phase:
+- Snapshot external semantics untouched: acquire/release/epoch/
+  revision/TextView-walk; callers never see pieces/chunks/storage kind.
+- Edit delta payload is COPIED once into ENCA-owned memory at the
+  adapter boundary -- zero-copy from Emacs objects is explicitly OUT
+  of scope (worker-lifetime hazard).
+- Append-only add-store model: edits never mutate existing buffers;
+  new revisions share unchanged pieces with prior ones.
+- Fragmentation METRICS only (piece count, avg piece size); no
+  coalescing/compaction on the interactive path.  Future consumer:
+  MAINTENANCE class (P3).
+- Stop conditions: rope/B-tree/lock-free variants/NUMA/zero-copy --
+  none, unless a written amendment cites EVS evidence.
+
+## 11. Closure (2026-08-24)
+
+EVS-2.2 landed behind the existing P2 APIs (`enca_doc_state`,
+piece-backed, append-only add-store).  Oracle green everywhere:
+24178 checks / 0 failures native, ASan clean, and a retention
+torture run (1000 x 1B edits over 100MB, snapshots retained at
+strides 8/32/128 and re-verified byte-stable; lifecycle identity
+created == destroyed && live == 0 enforced).  Ownership, publication
+(including out == NULL fire-and-forget) and accounting semantics are
+FROZEN in src/enca/snapshot/EVS2-DECISION.md.
+
+Storage work stops here.  Next and only next step: EVS-2.3 adapter
+A/B (full vs incremental) on the real keypress->visible path, with
+the strict Go/No-Go rule recorded in the decision file.  Phase tag:
+enca-evs2-incremental-storage.
