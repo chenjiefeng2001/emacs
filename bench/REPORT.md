@@ -632,3 +632,37 @@ Copy amplification:incremental è‡‚ copied==changed=104,869,888B â†’ **æ°ä¸º 1.0
 - EVS-3 = **³É¹¦**:Ä¿±ê¾ÍÊÇµØ°å±¾Éí,keypress¡úcommit ÔÚĞ¡ÎÄµµ´ïµ½Î¢Ãë¼¶;
 - EVS-2 NO-GO Î¬³Ö²»±ä(¡ì18),¼Ü¹¹¶³½á¿éÒÑĞ´Èë `src/enca/ARCHITECTURE.md` ¡ì25;
 - ÏÂÒ»¸öÖ÷µ¼³É±¾ÒÑ¿É²âÁ¿:**´óÎÄµµÏÂÊÇ"Ã¿ revision È«ÎÄµµ·ÖÎö"µÄ¹¤×÷¸ºÔØÄ£ĞÍ**¡ª¡ªÕâÕıÊÇ Real Completion(ÇøÓòĞÍÏû·ÑÕß)µÄ¶¯»úÖ¤¾İ;GUI Redisplay ·ÖÖ§ÈÔ´ı GUI »á»°Êı¾İ¡£
+
+
+
+## 20. EVS-4.1/4.2 ¡ª Synthetic Completion Slice(2026-08-24)
+
+### 20.1 ÆõÔ¼¶³½á(`bench/enca/evs4/COMPLETION.md`)
+Completion ÇëÇó**²»»ñµÃÎÄµµ**:Ö»ÓĞ snapshot ÒıÓÃ + ÉùÃ÷µÄ context range,¾­**ÏÖÓĞ** `enca_snapshot_walk_text` ¶ÁÈ¡¡ª¡ªÁãĞÂ Snapshot API¡£W1¨CW4(Ç°×º/³ÉÔ±/Êµ²Î/Óï·¨)´°¿Ú 32B¨C4KB ¶³½á;C1¨CC4 = 64KB/1MB/10MB/100MB;simd-json¡¢tree-sitter¡¢Range View È«²¿ÏÔÊ½³ö½ç¡£
+
+### 20.2 O(region) Ô¤ËãÃÅ½û(CONTRACT ¡ì8)
+| ÎÄµµ´óĞ¡ | 256B ÇøÓòÌáÈ¡ avg | piece Êı |
+|---|---|---|
+| 1MB | 1.46¦Ìs | 801 |
+| 8MB | 2.75¦Ìs | 801 |
+| 10MB | 2.66¦Ìs | 801 |
+| **100MB** | **3.14¦Ìs** | 801 |
+
+ÎÄµµ ¡Á100 Ôö³¤,ÌáÈ¡³É±¾ºã¶¨Î¢Ãë¼¶(ÔöÁ¿À´×Ô ~800 Æ¬¶ÎµÄÔªÊı¾İÉ¨Ãè)¡£**Range View ½ûÁî»ñµÃÓÀ¾ÃÊı¾İÖ§³Å**:ÇøÓò¶ÁÈ¡¾àÈÎºÎ¿É¸ĞÖªÑÓ³Ù²î 4 ¸öÊıÁ¿¼¶¡£
+
+### 20.3 Completion Storm(EVS-4.2)
+| ´ò×Ö¼ä¸ô | Áãºó¶ËÑÓ³Ù | ºó¶Ë 5ms | ºó¶Ë 20ms(clangd ¼¶) |
+|---|---|---|---|
+| storm(0ms) | **executed=1/12** | 1/12 | 1/12 |
+| 2ms | 12/12 | 12/12 | 9/12 |
+| 10ms | 12/12 | 12/12 | 10/12 |
+| 50ms | 12/12 | 12/12 | 12/12 |
+
+½áÂÛ:(a) ÕæÕıµÄÊäÈë·ç±©ÏÂ drop-before-compute ÍêÃÀ(1/12 Ö´ĞĞ);(b) ºÏ³É server Ì«¿ìÊ±¶ÓÁĞÓÀ²»»ıÑ¹¡ª¡ªsupersession ÎŞÊÂ¿É×öÊÇ**ºÃ**ÏûÏ¢;(c) ÒıÈëÕæÊµºó¶ËÑÓ³Ùºó,ÅÅ¶ÓÈÎÎñ±» REPLACE ÏûÃğ,¶ø**Ö´ĞĞÖĞÈÎÎñ²»ÊÜÓ°Ïì**(2ms ±Û 9/12)¡ª¡ªÕâÕıÊÇ #23 µÄ±ß½ç:in-flight ±£»¤ÊôĞ­×÷È¡Ïû(EVS-4.3 ½ÓÕæÊµ LSP Ê±½ÓÏß)¡£
+
+### 20.4 ÕıÈ·ĞÔÓëÑéÖ¤
+- ct/extract-oracle:Í¬Ò»ÄÚÈİ¾­ flat Óë piece-backed Á½ÖÖ´æ´¢,21 ¸öÇøÓò×éºÏÖğÒ»Óë¾µÏñ buffer ×Ö½Ú±È¶ÔÈ«µÈ;
+- ct/basic / o-region-budget / storm;È«Ì×¼ş **31750 checks / 0 failures** native,ASan clean,**TSan(WSL gcc)0 warnings / 31747 / 0**¡£
+
+### 20.5 ÏÂÒ»²½
+EVS-4.3(µ¥Ä¿±ê clangd)µÄÇ°ÖÃÌõ¼şÒÑÂú×ã:synthetic ÇĞÆ¬Ö¤Ã÷ workload ĞÎ×´³ÉÁ¢¡¢admission ÔÚ IDE ĞÍ¸ºÔØÏÂĞĞÎªÕıÈ·¡¢ÇøÓò¶ÁÈ¡³É±¾¿ÉºöÂÔ¡£Ê£Óà·çÏÕÈ«²¿¼¯ÖĞÔÚ 4.3/4.4 µÄ´«Êä²ãÓë Completion UI/redisplay ¹éÒò¡£
