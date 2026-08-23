@@ -186,3 +186,23 @@ buffer mutation / redisplay / main-thread polling / completion, and
 further piece-table work would be misdirected effort.
 
 Phase tag: `enca-evs2-incremental-storage`.
+
+## 9. Outcome appendix -- EVS-2.3 executed (2026-08-24): NO-GO
+
+The section-8 protocol ran on a real Emacs build (WSL, --batch),
+identical harness both arms, full matrix {1,10,100MB} x {1B..1KB}
+plus E1/E3.  Results (bench/REPORT.md section 18):
+
+- Capture latency: up to ~19,000x better at 100MB; amplification
+  exactly 1.000 on the incremental arm.
+- keypress->visible analog: NOT improved (+7..12% worse).  The
+  dominant cost is the synthetic full-document analysis plus ~20ms
+  batch-poll quantization; the piece-walk read makes the analysis
+  slower than it saves.
+
+The pre-committed NO-GO guard fired exactly as written: capture got
+>100x cheaper while the user path did not move.  Per this decision,
+snapshot storage optimization is permanently closed; no amendment
+may reopen it based on storage-internal metrics.  A future consumer
+with region-scoped analysis semantics would be a NEW vertical slice
+(task/analysis model), not storage work.

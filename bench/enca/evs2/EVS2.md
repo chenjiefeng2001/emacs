@@ -160,3 +160,14 @@ Storage work stops here.  Next and only next step: EVS-2.3 adapter
 A/B (full vs incremental) on the real keypress->visible path, with
 the strict Go/No-Go rule recorded in the decision file.  Phase tag:
 enca-evs2-incremental-storage.
+
+## 12. EVS-2.3 outcome (2026-08-24): NO-GO
+
+Adapter A/B executed on a real Emacs build (WSL, --batch), same
+harness both arms.  Capture latency improved up to ~19,000x at
+100MB (amplification exactly 1.0); end-to-end submit->committed did
+NOT improve (+7..12% worse: the synthetic full-document analysis
+dominates and pays more on the fragmented walk).  The pre-frozen
+metric-misalignment guard fired: per EVS2-DECISION.md section 8,
+snapshot storage optimization is now PERMANENTLY closed.  Evidence:
+bench/REPORT.md section 18.

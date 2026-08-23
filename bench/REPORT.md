@@ -563,3 +563,46 @@ P2/P3 ABI 全部冻结不可动；Edit Delta v1=单连续区间(start/old_end/in
 ### 17.6 诚实限制
 copy_amp 列在 CSV 分析脚本中存在解析空值显示问题(原始 copied_total 数据完整可靠);v1 分片表为 O(pieces) 顺序扫描,极端碎片化场景的合并策略沿用 P2.1 C2 deferred 结论。
 
+
+
+## 18. EVS-2.3 A/B Closure — 真实路径上的 Full vs Incremental Capture(2026-08-24)
+
+### 18.1 实现与接线(EVS-2.3 范围:adapter,零存储研究)
+- `enca_document_adopt_snapshot`:外部构建的快照经标准 document 槽位发布,P3 revision 门控与 commit 校验零改动;dstate/adopt 套件覆盖(supersede 后旧版仍可读、生命周期恒等式闭合);
+- `enca-evs.c`:`enca-evs-start WORKERS &optional INCREMENTAL` 双臂开关;worker 分析改走 `enca_snapshot_walk_text`(两种存储同一代码路径);新入口 `enca-evs-on-change-delta BEG END INS`(canonical byte offsets,v1 单连续区间);delta 计数(copied/changed)供放大比归因;
+- A/B 驱动 `test/enca/evs23-bench.el` + `run_evs23.ps1`:同一 harness、同一编辑动作,唯一差异是捕获策略。
+- 原生套件 24194 checks / 0 failures;ASan 干净;WSL 内真实 Emacs 构建编译零警告通过。
+
+### 18.2 捕获延迟(CELL cap_avg_ms,12 edits/cell,4 edit 尺寸区间)
+| size | full | incremental | 加速比 |
+|---|---|---|---|
+| 1MB | 0.76–1.19ms | 0.0045–0.0063ms | ~150–200× |
+| 10MB | 5.8–6.9ms | 0.0053–0.0075ms | ~1,000× |
+| **100MB** | **69–95ms** | **0.0050–0.0105ms** | **~10,000–19,000×** |
+
+Copy amplification:incremental 臂 copied==changed=104,869,888B → **恰为 1.000**(payload 单次拷贝);full 臂 100MB+1B ≈ 8.7M×。EVS-2.1 bench 结论在真实 Emacs 路径复现。
+
+### 18.3 端到端 submit→committed p50(keypress→visible 的 batch 模拟)
+| size | full | incremental | Δ |
+|---|---|---|---|
+| 1MB | ~17.6ms | ~19.8ms | +12% |
+| 10MB | ~54ms | ~59.8ms | +11% |
+| 100MB | ~452ms | ~485ms | +7% |
+
+**端到端没有变快,反而略慢。**
+
+### 18.4 归因
+- 全臂公共地板:~20ms 轮询量化(batch pump 循环,sleep 1ms+调度节拍)——1MB 级别完全由它主导;
+- 主导项:合成分析 = 每 revision 对全文做 FNV——full 臂读连续内存,E2E−capture @100MB ≈ 362ms;
+- incremental 臂同一分析走 piece-walk(~2000 片段、分散访问)≈ +120ms/revision——**捕获省下的 90ms 被全文分析的碎片化读取吃掉还倒贴**。
+
+### 18.5 判定:**NO-GO(指标错位守卫触发)** 
+按 EVS2-DECISION.md §8 事先冻结的停止规则:capture 改善 >100× 而 keypress→visible 未改善 → **snapshot 存储优化到此永久停止**(§7 stop conditions 不因任何内部指标重开)。本结论同时验证了守卫机制本身有效:若没有 A/B 门禁,增量捕获会以「capture 快 19000×」为名继续吸投,而用户实际感知为零。
+
+被否决的方向:piece-table 合并/rope/B-tree/任何存储深化。附带发现:增量臂略慢源于**全文档式消费者**(合成 FNV),真实区域型消费者(诊断/completion 增量解析)不会支付该成本——但那是 task/analysis 语义的新 vertical slice,不是存储工作。
+
+### 18.6 下一步候选(按本轮证据重排)
+1. **result→main 唤醒机制**(P3.2 遗留):~20ms 轮询地板现在主导全部小文档场景,E1/E3/E4 全线可见——下一个最大杠杆;
+2. Real Completion(真实 LSP/区域型分析):只有引入非全文档消费者后,增量捕获的价值才有机会兑现;
+3. Redisplay 测量:仍需 GUI 会话,batch 不可测。
+
