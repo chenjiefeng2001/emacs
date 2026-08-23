@@ -606,3 +606,29 @@ Copy amplification:incremental è‡‚ copied==changed=104,869,888B â†’ **æ°ä¸º 1.0
 2. Real Completion(çœŸå® LSP/åŒºåŸŸå‹åˆ†æ):åªæœ‰å¼•å…¥éå…¨æ–‡æ¡£æ¶ˆè´¹è€…å,å¢é‡æ•è·çš„ä»·å€¼æ‰æœ‰æœºä¼šå…‘ç°;
 3. Redisplay æµ‹é‡:ä»éœ€ GUI ä¼šè¯,batch ä¸å¯æµ‹ã€‚
 
+
+
+
+## 19. EVS-3 Closure ¡ª Main-thread Wakeup:Ïû³ı 20ms ²âÁ¿µØ°å(2026-08-24)
+
+### 19.1 ÊµÏÖ(EVS-3.0,ÆõÔ¼ÏÈĞĞ:`bench/enca/evs3/EVS3.md`)
+- `enca/wake/wake.{h,c}`:Runtime Notification Ô­Óï(token + mutex + condvar µÄÑÏ¸ñĞ­Òé;IDLE/NOTIFIED/MAIN_DRAINING ÓïÒå¡¢coalescing¡¢produce-then-notify / drain-then-wait ¹æÔòÓë¶ª»½ĞÑÖ¤Ã÷Ğ´ÈëÆõÔ¼);
+- scheduler Ôö¼Ó¿ÉÑ¡ÒµÎñÎŞÖª observer(`result_notify`,Ò¶×Ó°²È«Ô¼Êø),ÔÚ½á¹ûÈë¶Óºó´¥·¢¡ª¡ªscheduler ²»ÖªÏş Emacs;
+- **EVS-3 ÃÅ½û×¥µ½´æÁ¿È±¿Ú**:ÎÄµµĞû³ÆµÄ STOP_ACCEPTING Ìá½»ÃÅ´ÓÎ´ÊµÏÖ(`shutdown_rejects` ¼ÆÊıÆ÷´æÔÚµ«ÎŞÈËµİÔö,shutdown ºóÌá½»»á¾²Ä¬Èë¶Ó)¡ú ²¹ÉÏ lifecycle ¼ì²é,wake/shutdown Ì×¼ş¸²¸Ç;
+- ÆßÌ×¼ş:single/burst/drain-race/notify-during-drain/producer-storm/shutdown/generation-reset¡£**24318/0 ¡Á3 native + ASan clean + TSan(WSL gcc)0 warnings**¡ª¡ªË³´ø²¹Æë EVS-2 ÒÅÁôµÄ TSan Ö¤¾İ(È«²¢·¢Ãæ)¡£
+
+### 19.2 EVS-3.1 ĞÔÄÜ(ÕæÊµ Emacs ¹¹½¨,Í¬ A/B harness)
+| ³¡¾° | µØ°åÆÚ p50 | wakeup ºó p50 |
+|---|---|---|
+| E1 idle-typing(full) | ~19.3ms | **0.083ms** |
+| E1 idle-typing(incr) | ~19.5ms | **0.0008ms** |
+| E4 1MB | ~17¨C20ms | 4.3¨C6.2ms |
+| E4 10MB | ~54¨C76ms | incr 37¨C42ms / full 43¨C76ms |
+| E4 100MB | ~452¨C485ms | ~386¨C624ms(·ÖÎöÖ÷µ¼) |
+
+~20ms µØ°å ¡ú Î¢Ãë¼¶¡£µØ°åÒÆ³ıºóÊ×´Î¹«Æ½µØ¿´µ½²¶»ñ³É±¾:10MB ´¦ÔöÁ¿±ÛÎÈ¶¨¿ì ~20%(40 vs 55ms);100MB ±»ºÏ³ÉÈ«ÎÄ·ÖÎö(~400ms+)Ö÷µ¼,Ë«±Û´òÆ½¡ª¡ªÓë EVS-2 NO-GO ½áÂÛÒ»ÖÂ¡£
+
+### 19.3 ÅĞ¶¨
+- EVS-3 = **³É¹¦**:Ä¿±ê¾ÍÊÇµØ°å±¾Éí,keypress¡úcommit ÔÚĞ¡ÎÄµµ´ïµ½Î¢Ãë¼¶;
+- EVS-2 NO-GO Î¬³Ö²»±ä(¡ì18),¼Ü¹¹¶³½á¿éÒÑĞ´Èë `src/enca/ARCHITECTURE.md` ¡ì25;
+- ÏÂÒ»¸öÖ÷µ¼³É±¾ÒÑ¿É²âÁ¿:**´óÎÄµµÏÂÊÇ"Ã¿ revision È«ÎÄµµ·ÖÎö"µÄ¹¤×÷¸ºÔØÄ£ĞÍ**¡ª¡ªÕâÕıÊÇ Real Completion(ÇøÓòĞÍÏû·ÑÕß)µÄ¶¯»úÖ¤¾İ;GUI Redisplay ·ÖÖ§ÈÔ´ı GUI »á»°Êı¾İ¡£

@@ -137,3 +137,26 @@ end to end.
     counters per reason, and per-class queue-wait histograms.
 
 See `cancel/LIFETIME.md` for the cancellation-object lifetime protocol.
+
+## 25. Architecture Status Freeze (2026-08-24, EVS-2/3 closure)
+
+Experiment-backed status; changing any line below requires the same
+evidence bar that produced it (user-path measurement, not internal
+metrics):
+
+```text
+EVS-2 Incremental Capture   = CLOSED / NO-GO  (bench/REPORT.md #18)
+Piece-table storage         = FROZEN          (snapshot/EVS2-DECISION.md)
+Snapshot ABI                = FROZEN
+P3 Scheduler semantics      = FROZEN (lifecycle-gate erratum fixed in
+                              EVS-3; see bench/enca/evs3/EVS3.md)
+P3.3                        = DOES NOT EXIST
+Main-thread Wakeup (EVS-3)  = LANDED; polling floor removed
+Next decision               = BY MEASUREMENT: Real Completion vs GUI
+                              Redisplay (EVS-3 outcome data)
+```
+
+Standing ban: reopening piece-table work to revisit the EVS-2.3 NO-GO.
+Range Snapshot / Region View remains banned until Real Completion
+measurements show Full Snapshot is the actual bottleneck
+(demand -> evidence -> API).

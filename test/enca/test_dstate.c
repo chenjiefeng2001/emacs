@@ -302,7 +302,6 @@ test_dstate_torture (void)
 
   enum { CAP_MAX = 200, WIN = 256 };
   enca_document_snapshot *kept[CAP_MAX];
-  size_t kept_rev[CAP_MAX];
   unsigned char kept_win[CAP_MAX][WIN];   /* ref window at hold time */
   size_t kept_off[CAP_MAX];
   enca_u64 kept_hash[CAP_MAX];            /* subset: full hash at hold */
@@ -336,7 +335,6 @@ test_dstate_torture (void)
               kept_hash[kept_n] = h;
             }
           kept[kept_n] = ks;
-          kept_rev[kept_n] = (size_t) i;
           kept_n++;
         }
 
