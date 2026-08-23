@@ -67,6 +67,7 @@ main (void)
   void run_test_wake (void);
   void run_test_completion (void);
   void run_test_lsp (void);
+  void run_test_ctpath (void);
   void run_test_scheduler (void);
 
   run_test_base ();
@@ -88,6 +89,7 @@ main (void)
   run_test_wake ();
   run_test_completion ();
   run_test_lsp ();
+  run_test_ctpath ();
   run_test_scheduler ();
 
   printf ("\n%d checks, %d failures\n", enca_test_checks,

@@ -235,3 +235,114 @@ enca_ct_synth_server (const enca_ct_request *req,
     *serve_ns = t2 - t1;
   return ENCA_OK;
 }
+
+/* ---------------- EVS-4.4 model / popup ---------------- */
+
+static enca_u64
+ct_prng (enca_u64 *s)
+{
+  *s ^= *s << 13;
+  *s ^= *s >> 7;
+  *s ^= *s << 17;
+  return *s;
+}
+
+enca_result
+enca_ct_model_build (size_t count, size_t label_len, size_t annot_len,
+                     enca_u64 seed, enca_ct_filter filter,
+                     enca_ct_model *out)
+{
+  if (!out || label_len == 0)
+    return ENCA_ERR_INVALID_ARGUMENT;
+
+  enca_u64 s = seed | 1;
+  /* Deterministic pre-pass so COUNT is exact after filtering: keep
+     every K-th item depending on filter tightness. */
+  size_t stride = filter == ENCA_CTF_EXACT   ? 10u
+                  : filter == ENCA_CTF_PREFIX ? 3u
+                                              : 2u;
+  size_t kept = 0;
+  for (size_t i = 0; i < count; i++)
+    if (i % stride == 0)
+      kept++;
+
+  enca_ct_model m;
+  m.count = kept;
+  m.bytes = 0;
+  m.items = enca_malloc (kept * sizeof (enca_ct_candidate));
+  if (!m.items)
+    return ENCA_ERR_OUT_OF_MEMORY;
+  memset (m.items, 0, kept * sizeof (enca_ct_candidate));
+
+  for (size_t i = 0, k = 0; i < count; i++)
+    {
+      if (i % stride != 0)
+        continue;
+      enca_ct_candidate *c = &m.items[k++];
+      c->label_len = label_len;
+      c->label = enca_malloc (label_len + 1);
+      if (!c->label)
+        goto oom;
+      m.bytes += label_len + 1;
+      enca_u64 x = ct_prng (&s);
+      for (size_t p = 0; p < label_len; p++, x = ct_prng (&s))
+        c->label[p] = (char) ('a' + (x % 26));
+      c->label[label_len] = 0;
+
+      if (annot_len)
+        {
+          c->annot_len = annot_len;
+          c->annot = enca_malloc (annot_len + 1);
+          if (!c->annot)
+            goto oom;
+          m.bytes += annot_len + 1;
+          memset (c->annot, 'd', annot_len);
+          c->annot[annot_len] = 0;
+        }
+    }
+  *out = m;
+  return ENCA_OK;
+
+oom:
+  enca_ct_model_destroy (&m);
+  return ENCA_ERR_OUT_OF_MEMORY;
+}
+
+void
+enca_ct_model_destroy (enca_ct_model *m)
+{
+  if (!m || !m->items)
+    return;
+  for (size_t i = 0; i < m->count; i++)
+    {
+      enca_free (m->items[i].label);
+      enca_free (m->items[i].annot);
+    }
+  enca_free (m->items);
+  memset (m, 0, sizeof *m);
+}
+
+void
+enca_ct_popup_layout_calc (const enca_ct_model *m, size_t max_rows,
+                      size_t cursor_index, enca_ct_popup_layout *out)
+{
+  if (!m || !out)
+    return;
+  size_t n = m->count;
+  out->visible_rows = max_rows < n ? max_rows : n;
+
+  /* Keep the cursor row visible: scroll offset window. */
+  if (cursor_index >= out->visible_rows)
+    out->first_visible = cursor_index - out->visible_rows + 1;
+  else
+    out->first_visible = 0;
+
+  /* Widest visible column (annotation excluded from width calc --
+     frontends render it in a separate face/column). */
+  size_t w = 0;
+  size_t end = out->first_visible + out->visible_rows;
+  for (size_t i = out->first_visible; i < end && i < n; i++)
+    if (m->items[i].label_len > w)
+      w = m->items[i].label_len;
+  out->col_width = w;
+}
