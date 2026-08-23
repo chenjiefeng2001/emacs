@@ -1791,6 +1791,7 @@ if test "$enable_enca" = yes; then
   ENCA_OBJ="$ENCA_OBJ enca/snapshot/snapshot.o enca/scheduler/scheduler.o"
   ENCA_OBJ="$ENCA_OBJ enca/wake/wake.o"
   ENCA_OBJ="$ENCA_OBJ enca/completion/completion.o"
+  ENCA_OBJ="$ENCA_OBJ enca/lsp/jsonrpc.o enca/lsp/transport.o enca/lsp/session.o"
   ENCA_OBJ="$ENCA_OBJ enca/time/clock.o enca/trace/profiler.o"
   dnl EVS-1 vertical slice glue (interactive path).
   AC_DEFINE([HAVE_ENCA_EVS], [1],
