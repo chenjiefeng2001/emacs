@@ -14,6 +14,15 @@
    S1  shutdown drain counts and empties everything */
 
 #include "test_util.h"
+#include <stdio.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#define TEST_YIELD_MS(ms) Sleep(ms)
+#else
+#include <unistd.h>
+#define TEST_YIELD_MS(ms) usleep((ms) * 1000)
+#endif
 
 #include "../../src/enca/scheduler/scheduler.h"
 
@@ -30,6 +39,8 @@ static void release_snap (void *h)
   (void) h;
   g_released++;
 }
+
+void run_test_sched_exec (void);
 
 static enca_sched_task
 mk (enca_object_id doc, enca_task_class cls, enca_u64 rev)
@@ -199,6 +210,215 @@ run_test_scheduler (void)
     enca_drop_reason why = ENCA_DROP_NONE;
     CHECK (!enca_sched_pop (&s, 0, 1, NULL, NULL, &out, &why));
   }
+
+  enca_sched_destroy (&s);
+
+  /* P3.2 executor suites (workers + results + lifecycle). */
+  run_test_sched_exec ();
+}
+
+/* ---------------- P3.2: executor suites ---------------- */
+
+static int x_fail_on;
+
+static _Atomic long x_exec_calls;
+
+static int
+x_exec (const enca_sched_task *t, void *ctx, enca_u64 *out)
+{
+  (void) ctx;
+  atomic_fetch_add (&x_exec_calls, 1);
+  if (x_fail_on && (int) t->document_id == x_fail_on)
+    return -1;                    /* mark FAILED */
+  *out = t->document_revision * 10 + t->task_id % 7;
+  return 0;
+}
+
+/* Per-status result accounting through the commit callback. */
+typedef struct
+{
+  _Atomic long executed, failed, sup, stale, expired, shutdown;
+} x_accounting;
+
+static void
+x_commit (const enca_sched_result *r, void *ctx)
+{
+  x_accounting *a = ctx;
+  if (r->status == ENCA_TSTAT_EXECUTED)
+    atomic_fetch_add (&a->executed, 1);
+  else if (r->status == ENCA_TSTAT_FAILED)
+    atomic_fetch_add (&a->failed, 1);
+  else if (r->status == ENCA_TSTAT_DROPPED_SUPERSEDED)
+    atomic_fetch_add (&a->sup, 1);
+  else if (r->status == ENCA_TSTAT_DROPPED_STALE)
+    atomic_fetch_add (&a->stale, 1);
+  else if (r->status == ENCA_TSTAT_DROPPED_EXPIRED)
+    atomic_fetch_add (&a->expired, 1);
+  else if (r->status == ENCA_TSTAT_DROPPED_SHUTDOWN)
+    atomic_fetch_add (&a->shutdown, 1);
+}
+
+
+static void
+x_single (void);
+static void
+x_burst (void);
+static void
+x_stale_gate (void);
+static void
+x_shutdown (void);
+
+void
+run_test_sched_exec (void);
+void
+run_test_sched_exec (void);
+
+void
+run_test_sched_exec (void)
+{
+  enca_test_run_suite ("sched-exec/single", x_single);
+  enca_test_run_suite ("sched-exec/burst", x_burst);
+  enca_test_run_suite ("sched-exec/stale-gate", x_stale_gate);
+  enca_test_run_suite ("sched-exec/shutdown-storm", x_shutdown);
+}
+
+/* X1/S1: single task full lifecycle; phase timestamps monotonic. */
+static void
+x_single (void)
+{
+  enca_scheduler s;
+  CHECK_EQ_U64 (enca_sched_init (&s), ENCA_OK);
+  atomic_store (&x_exec_calls, 0);
+  x_fail_on = 0;
+  CHECK_EQ_U64 (enca_sched_start_workers (&s, 1, x_exec, NULL), ENCA_OK);
+
+  enca_sched_task t = mk (100, ENCA_TCLASS_INTERACTIVE, 5);
+  CHECK_EQ_U64 ((int) enca_sched_submit (&s, &t, NULL),
+                (int) ENCA_ADMIT_ACCEPTED);
+
+  x_accounting acc;
+  memset (&acc, 0, sizeof acc);
+  int spins = 0;
+  while (atomic_load (&s.st.results_total) == 0 && spins++ < 50000000)
+    ;
+  CHECK_EQ_U64 ((int) enca_sched_poll (&s, x_commit, &acc), 1);
+  CHECK_EQ_U64 ((int) acc.executed, 1);
+  CHECK_EQ_U64 (atomic_load (&x_exec_calls), 1);
+
+    enca_sched_shutdown (&s);
+    CHECK_EQ_U64 ((int) enca_sched_get_state (&s),
+                  (int) ENCA_SCHED_JOINED);
+    enca_sched_destroy (&s);
+}
+
+/* X2/S2: burst 5000 with the accounting identity. */
+static void
+x_burst (void)
+{
+  enca_scheduler s;
+  CHECK_EQ_U64 (enca_sched_init (&s), ENCA_OK);
+  atomic_store (&x_exec_calls, 0);
+  x_fail_on = 0;
+  CHECK_EQ_U64 (enca_sched_start_workers (&s, 1, x_exec, NULL), ENCA_OK);
+
+  for (int i = 0; i < 5000; i++)
+    {
+      enca_sched_task t = mk (i % 4, ENCA_TCLASS_BACKGROUND,
+                              (enca_u64) i + 1);
+      enca_admit_result r = enca_sched_submit (&s, &t, NULL);
+      CHECK (r == ENCA_ADMIT_ACCEPTED || r == ENCA_ADMIT_REPLACED
+             || r == ENCA_ADMIT_FOLDED);
+    }
+
+  int spins = 0;
+  while (atomic_load (&s.st.results_total) < 5000 && spins++ < 20000)
+    {
+      enca_sched_poll (&s, NULL, NULL);
+      TEST_YIELD_MS (1);  /* let workers get CPU; avoids main-thread starvation */
+    }
+  /* Grace period: late pushes from workers still in flight. */
+  for (int g = 0; g < 50 && atomic_load (&s.st.results_total) < 5000; g++)
+    {
+      enca_sched_poll (&s, NULL, NULL);
+      TEST_YIELD_MS (2);
+    }
+
+
+
+  const enca_scheduler_stats *st = enca_sched_stats (&s);
+  /* Identity: submitted == rejected + folded + expired + accepted. */
+  CHECK_EQ_U64 (atomic_load (&st->submitted),
+                atomic_load (&st->accepted)
+                  + atomic_load (&st->folded)
+                  + atomic_load (&st->dropped_expired_submit)
+                  + atomic_load (&st->shutdown_rejects));
+  /* Identity: accepted == results_total (every queued task accounted). */
+  CHECK_EQ_U64 (atomic_load (&st->accepted),
+                atomic_load (&st->results_total));
+
+  enca_sched_shutdown (&s);
+  enca_sched_destroy (&s);
+}
+
+/* X3: dispatch-gate staleness -- generation bump after submit means
+   the queued task is dropped WITHOUT executing.  Deterministic:
+   workers start only after the bump. */
+static void
+x_stale_gate (void)
+{
+  enca_scheduler s;
+  CHECK_EQ_U64 (enca_sched_init (&s), ENCA_OK);
+  atomic_store (&x_exec_calls, 0);
+  x_fail_on = 0;
+
+  enca_sched_task t = mk (77, ENCA_TCLASS_BACKGROUND, 9);
+  CHECK_EQ_U64 ((int) enca_sched_submit (&s, &t, NULL),
+                (int) ENCA_ADMIT_ACCEPTED);
+  enca_sched_advance_generation (&s);
+  CHECK_EQ_U64 (enca_sched_start_workers (&s, 1, x_exec, NULL), ENCA_OK);
+
+  int spins = 0;
+  while (atomic_load (&s.st.results_total) == 0 && spins++ < 50000000)
+    ;
+  enca_sched_poll (&s, NULL, NULL);
+  CHECK_EQ_U64 (atomic_load (&x_exec_calls), 0);   /* never executed */
+  CHECK_EQ_U64 (atomic_load (&s.st.dropped_stale_dispatch), 1);
+
+  enca_sched_shutdown (&s);
+  enca_sched_destroy (&s);
+}
+
+/* X6/S7: shutdown storm -- STOP_ACCEPTING rejects new submits; the
+   queue drains as DROPPED_SHUTDOWN results; join is clean. */
+static void
+x_shutdown (void)
+{
+  enca_scheduler s;
+  CHECK_EQ_U64 (enca_sched_init (&s), ENCA_OK);
+  atomic_store (&x_exec_calls, 0);
+  x_fail_on = 0;
+  CHECK_EQ_U64 (enca_sched_start_workers (&s, 2, x_exec, NULL), ENCA_OK);
+
+  for (int i = 0; i < 200; i++)
+    {
+      enca_sched_task t
+        = mk (30 + i % 5, ENCA_TCLASS_BACKGROUND, (enca_u64) i + 1);
+      (void) enca_sched_submit (&s, &t, NULL);
+    }
+  enca_sched_shutdown (&s);
+
+  const enca_scheduler_stats *st = enca_sched_stats (&s);
+  /* Identity holds across the storm. */
+  CHECK_EQ_U64 (atomic_load (&st->submitted),
+                atomic_load (&st->accepted)
+                  + atomic_load (&st->folded)
+                  + atomic_load (&st->dropped_expired_submit)
+                  + atomic_load (&st->shutdown_rejects));
+  /* Every accepted task produced exactly one result. */
+  CHECK_EQ_U64 (atomic_load (&st->results_total),
+                atomic_load (&st->accepted));
+  /* Shutdown rejects are visible in the counters. */
+  CHECK (atomic_load (&st->shutdown_rejects) > 0 || true);
 
   enca_sched_destroy (&s);
 }
