@@ -29,18 +29,22 @@
              (evs23--pct s 99) (or (car (last s)) 0))))
 
 (defun evs23--wait-committed (target-rev max-ms)
-  "Pump until last-commit >= TARGET-REV or MAX-MS elapsed.
+  "Block until LAST-COMMIT >= TARGET-REV or MAX-MS elapsed.
+Uses the EVS-3 wakeup primitive when available (sub-ms floor);
+otherwise falls back to the legacy sleep-poll loop.
 Returns elapsed ms or nil on timeout."
-  (let ((t0 (float-time))
-        (deadline (+ (float-time) (/ max-ms 1000.0))))
-    (while (and (< (float-time) deadline)
-                (or (null (enca-evs-last-commit))
-                    (< (enca-evs-last-commit) target-rev)))
-      (enca-evs-pump)
-      (sleep-for 0 1))
-    (when (and (enca-evs-last-commit)
-               (>= (enca-evs-last-commit) target-rev))
-      (* (- (float-time) t0) 1000.0))))
+  (if (fboundp 'enca-evs-wait-committed)
+      (enca-evs-wait-committed target-rev max-ms)
+    (let ((t0 (float-time))
+          (deadline (+ (float-time) (/ max-ms 1000.0))))
+      (while (and (< (float-time) deadline)
+                  (or (null (enca-evs-last-commit))
+                      (< (enca-evs-last-commit) target-rev)))
+        (enca-evs-pump)
+        (sleep-for 0 1))
+      (when (and (enca-evs-last-commit)
+                 (>= (enca-evs-last-commit) target-rev))
+        (* (- (float-time) t0) 1000.0)))))
 
 (defun evs23--modes ()
   (let ((raw (or (getenv "EVS23_MODES") "full,incr")))

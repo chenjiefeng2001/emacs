@@ -45,11 +45,13 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "enca/snapshot/snapshot.h"
 #include "enca/scheduler/scheduler.h"
+#include "enca/wake/wake.h"
 #include "enca/id/id.h"
 
 #include <stdio.h>
 
 #define EVS_RING 4096
+#define EVS_WAIT_SLICE_NS 50000000ull   /* 50ms max block per wait */
 
 typedef struct
 {
@@ -74,6 +76,18 @@ static int evs_workers;
 static enca_doc_state *evs_ds;
 static _Atomic enca_u64 evs_delta_copied_total;  /* bytes into pieces  */
 static _Atomic enca_u64 evs_delta_changed_total; /* logical del + ins  */
+
+/* EVS-3 runtime notification: results-ready sink for the scheduler.
+   Lets the integration side BLOCK until work is pending instead of
+   sleep-polling (the ~20ms batch floor). */
+static enca_wake_source evs_wake;
+static bool evs_have_wake;
+
+static void
+evs_result_ready (void *ctx)
+{
+  enca_wake_notify ((enca_wake_source *) ctx);
+}
 
 static _Atomic enca_u64 evs_committed_rev;
 static _Atomic enca_u64 evs_submitted_total;
@@ -184,6 +198,12 @@ evs_stop_internal (void)
   enca_sched_destroy (&evs_sched);
   enca_doc_state_destroy (evs_ds);
   evs_ds = NULL;
+  if (evs_have_wake)
+    {
+      /* No waiters exist once the scheduler is joined (contract). */
+      enca_wake_destroy (&evs_wake);
+      evs_have_wake = false;
+    }
   enca_document_destroy (evs_doc);
   enca_snap_reclaim (&evs_sys);
   evs_doc = NULL;
@@ -220,6 +240,13 @@ Returns the number of workers actually started.  */)
     error ("EVS: document state create failed");
   if (enca_sched_init (&evs_sched) != ENCA_OK)
     error ("EVS: scheduler init failed");
+
+  /* EVS-3: results-ready notification.  Optional by design; without
+     it consumers fall back to polling. */
+  evs_have_wake = enca_wake_init (&evs_wake) == ENCA_OK;
+  if (evs_have_wake)
+    enca_sched_set_result_notify (&evs_sched, evs_result_ready,
+                                  &evs_wake);
 
   atomic_store (&evs_committed_rev, 0);
   atomic_store (&evs_submitted_total, 0);
@@ -455,6 +482,46 @@ Returns the number of results routed.  */)
                                              evs_commit_cb, evs_doc));
 }
 
+/* EVS-3: block until LAST-COMMIT >= REV or TIMEOUT-MS elapses.
+   Drains first (protocol rule), then waits on the wake source in
+   bounded slices so shutdown stays observable.  Returns elapsed ms as
+   a float on success, nil on timeout. */
+DEFUN ("enca-evs-wait-committed", Fenca_evs_wait_committed,
+       Senca_evs_wait_committed, 2, 2, 0,
+       doc: /* Wait until the latest committed revision is >= REV.
+Waits at most TIMEOUT-MS milliseconds; returns elapsed ms, or nil on
+timeout.  Requires the slice to be active with wakeup support.  */)
+  (Lisp_Object rev, Lisp_Object timeout_ms)
+{
+  CHECK_FIXNAT (rev);
+  CHECK_FIXNAT (timeout_ms);
+  if (!evs_active || !evs_have_wake)
+    error ("EVS wait-committed requires an active slice with wakeup");
+
+  enca_u64 target = (enca_u64) XFIXNAT (rev);
+  enca_u64 budget = (enca_u64) XFIXNAT (timeout_ms) * 1000000ull;
+  enca_u64 t0 = enca_monotonic_now_ns ();
+  enca_u64 deadline = t0 + budget;
+
+  for (;;)
+    {
+      /* Drain FIRST, then sleep on the notification token. */
+      enca_sched_poll (&evs_sched, evs_commit_cb, evs_doc);
+      if (atomic_load (&evs_committed_rev) >= target)
+        {
+          double ms = (double) (enca_monotonic_now_ns () - t0) / 1e6;
+          return make_float (ms);
+        }
+      enca_u64 now = enca_monotonic_now_ns ();
+      if (now >= deadline)
+        return Qnil;
+      enca_u64 left = deadline - now;
+      enca_wake_wait (&evs_wake,
+                      left < EVS_WAIT_SLICE_NS ? left
+                                               : EVS_WAIT_SLICE_NS);
+    }
+}
+
 DEFUN ("enca-evs-last-commit", Fenca_evs_last_commit,
        Senca_evs_last_commit, 0, 0, 0,
        doc: /* Latest committed document revision, or nil.  */)
@@ -513,6 +580,7 @@ syms_of_enca_evs (void)
   defsubr (&Senca_evs_on_change);
   defsubr (&Senca_evs_on_change_delta);
   defsubr (&Senca_evs_pump);
+  defsubr (&Senca_evs_wait_committed);
   defsubr (&Senca_evs_last_commit);
   defsubr (&Senca_evs_stats);
   defsubr (&Senca_evs_latency);
