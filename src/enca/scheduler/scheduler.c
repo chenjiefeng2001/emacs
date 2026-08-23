@@ -98,6 +98,21 @@ sched_push_result (enca_scheduler *s, enca_sched_result *r)
   if (st == ENCA_TSTAT_FAILED)
     atomic_fetch_add (&s->st.failed, 1);
   enca_mutex_unlock (&s->rlock);
+
+  /* EVS-3: fire the observer AFTER the result is visible under
+     rlock (produce-then-notify order).  The hook is leaf-safe by
+     contract; calling it here may hold qlock in drop paths, which is
+     safe because the hook never acquires ENCA locks. */
+  if (s->result_notify)
+    s->result_notify (s->result_notify_ctx);
+}
+
+void
+enca_sched_set_result_notify (enca_scheduler *s,
+                              void (*fn) (void *ctx), void *ctx)
+{
+  s->result_notify = fn;
+  s->result_notify_ctx = ctx;
 }
 
 static enca_sched_result *
@@ -179,6 +194,18 @@ enca_sched_submit (enca_scheduler *s, const enca_sched_task *in,
     }
 
   enca_mutex_lock (&s->lock);
+
+  /* Lifecycle gate (#P3.2): once shutdown has begun, submissions are
+     rejected outright.  Erratum fixed during EVS-3: the stats field
+     existed and the behaviour was documented, but the gate itself was
+     never enforced -- a post-shutdown submit silently queued. */
+  if (atomic_load ((atomic_int *) &s->state) != ENCA_SCHED_RUNNING)
+    {
+      atomic_fetch_add (&s->st.shutdown_rejects, 1);
+      enca_mutex_unlock (&s->lock);
+      return ENCA_ADMIT_REJECTED;
+    }
+
   enca_task_queue *q = &s->q[in->cls];
   bool evicted = false;
 

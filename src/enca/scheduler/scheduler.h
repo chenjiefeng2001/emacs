@@ -179,6 +179,14 @@ typedef struct enca_scheduler
   enca_mutex rlock;
   enca_sched_result *res_head, *res_tail;
   enca_usize res_count;
+
+  /* EVS-3 optional result-ready observer.  Invoked from worker
+     threads after a result is enqueued (and from shutdown drain).
+     Business-ignorant by contract: the hook must be LEAF-SAFE -- no
+     scheduler/snapshot locks, no Emacs state, return promptly.
+     Coalescing is the sink's job (enca_wake_source). */
+  void (*result_notify) (void *ctx);
+  void *result_notify_ctx;
 } enca_scheduler;
 
 enca_result enca_sched_init (enca_scheduler *s);
@@ -229,6 +237,12 @@ enca_sched_get_state (const enca_scheduler *s);
    Non-blocking; returns the number routed. */
 enca_usize enca_sched_poll (enca_scheduler *s,
                             enca_sched_commit_fn commit_cb, void *ctx);
+
+/* EVS-3: register the optional result-ready observer.  Must be set
+   BEFORE workers start and left stable while they run; pass NULL to
+   clear when no workers are running. */
+void enca_sched_set_result_notify (enca_scheduler *s,
+                                   void (*fn) (void *ctx), void *ctx);
 
 /* Shutdown sequence:
    STOP_ACCEPTING (submits rejected, DROP_SHUTDOWN counted)
