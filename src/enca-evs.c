@@ -65,6 +65,13 @@ static _Atomic enca_u64 evs_executed_total;
 static _Atomic enca_u64 evs_wasted_total;      /* stale commits */
 static _Atomic enca_u64 evs_superseded_total;
 
+/* Capture-phase attribution (EVS-1 closure): total ns spent inside
+   capture+publish and how many captures were made.  Capture is the
+   buffer-string copy + snapshot publish, measured on the main
+   thread at submit time. */
+static _Atomic enca_u64 evs_capture_ns_total;
+static _Atomic enca_u64 evs_capture_count;
+
 /* Latency ring (written from main thread inside commit callback). */
 static evs_lat_rec evs_ring[EVS_RING];
 static enca_usize evs_ring_pos;
@@ -210,14 +217,23 @@ DEFUN ("enca-evs-stop", Fenca_evs_stop, Senca_evs_stop, 0, 0, 0,
 }
 
 /* Capture + submit: called from the after-change hook (or directly
-   from benchmarks).  STRING is the full buffer content snapshot. */
+   from benchmarks).  STRING is the full buffer content snapshot.
+   Returns admission result; *capture_ns (if non-NULL) receives the
+   capture+publish duration for latency attribution. */
 static enca_admit_result
-evs_capture_submit (const unsigned char *data, enca_usize len)
+evs_capture_submit (const unsigned char *data, enca_usize len,
+                    enca_u64 *capture_ns)
 {
+  enca_u64 t0 = enca_monotonic_now_ns ();
   enca_capture_input in = { ENCA_ENC_UTF8, data, len };
   enca_document_snapshot *snap = NULL;
   if (enca_snapshot_publish (&evs_sys, evs_doc, &in, 1, &snap) != ENCA_OK)
     return ENCA_ADMIT_REJECTED;
+  enca_u64 t1 = enca_monotonic_now_ns ();
+  if (capture_ns)
+    *capture_ns = t1 - t0;
+  atomic_fetch_add (&evs_capture_ns_total, t1 - t0);
+  atomic_fetch_add (&evs_capture_count, 1);
 
   /* Transfer ownership of the published-snapshot reference into the
      task; supersession releases it via the release hook. */
@@ -249,7 +265,8 @@ accepted/replaced/folded/expired as a symbol.  */)
   if (!evs_active)
     error ("EVS-1 not active");
   enca_admit_result r = evs_capture_submit (SDATA (string),
-                                            (enca_usize) SBYTES (string));
+                                            (enca_usize) SBYTES (string),
+                                            NULL);
   switch (r)
     {
     case ENCA_ADMIT_ACCEPTED: return Qaccepted;
@@ -257,6 +274,51 @@ accepted/replaced/folded/expired as a symbol.  */)
     case ENCA_ADMIT_FOLDED: return Qfolded;
     default: return Qexpired;
     }
+}
+
+/* B1 baseline: the SAME capture + synthetic analysis, executed
+   synchronously on the calling thread with NO scheduler, NO worker,
+   NO result routing.  Returns (HASH ELAPSED-MS).  */
+DEFUN ("enca-evs-sync-analysis", Fenca_evs_sync_analysis,
+       Senca_evs_sync_analysis, 1, 1, 0,
+       doc: /* Run the EVS-1 synthetic analysis synchronously on STRING.
+Returns (FNV-HASH ELAPSED-MS).  B1 baseline for the closure study.  */)
+  (Lisp_Object string)
+{
+  CHECK_STRING (string);
+  if (!evs_active)
+    error ("EVS-1 not active");
+
+  enca_u64 t0 = enca_monotonic_now_ns ();
+  enca_capture_input in = { ENCA_ENC_UTF8, SDATA (string),
+                            (enca_usize) SBYTES (string) };
+  enca_document_snapshot *snap = NULL;
+  if (enca_snapshot_publish (&evs_sys, evs_doc, &in, 1, &snap) != ENCA_OK)
+    error ("EVS-1 sync publish failed");
+  enca_utf8_view v = enca_snapshot_text (snap);
+  enca_u64 h = (enca_u64) 1469598103934665603ull;
+  for (enca_usize i = 0; i < v.len; i++)
+    {
+      h ^= v.data[i];
+      h *= (enca_u64) 1099511628211ull;
+    }
+  enca_u64 t1 = enca_monotonic_now_ns ();
+  enca_snapshot_release (snap);
+  return listn (2, make_uint (h),
+                make_float ((double) (t1 - t0) / 1e6));
+}
+
+/* Attribution: (capture-total-ms capture-count avg-capture-ms). */
+DEFUN ("enca-evs-capture-stats", Fenca_evs_capture_stats,
+       Senca_evs_capture_stats, 0, 0, 0,
+       doc: /* Capture-phase attribution accumulated since start.  */)
+  (void)
+{
+  enca_u64 total = atomic_load (&evs_capture_ns_total);
+  enca_u64 count = atomic_load (&evs_capture_count);
+  double avg = count ? (double) total / (double) count / 1e6 : 0;
+  return listn (3, make_float ((double) total / 1e6),
+                make_uint (count), make_float (avg));
 }
 
 DEFUN ("enca-evs-pump", Fenca_evs_pump, Senca_evs_pump, 0, 0, 0,
@@ -330,6 +392,8 @@ syms_of_enca_evs (void)
   defsubr (&Senca_evs_last_commit);
   defsubr (&Senca_evs_stats);
   defsubr (&Senca_evs_latency);
+  defsubr (&Senca_evs_sync_analysis);
+  defsubr (&Senca_evs_capture_stats);
 }
 
 #endif /* HAVE_ENCA_EVS */

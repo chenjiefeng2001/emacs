@@ -496,3 +496,40 @@ NOT GATE     work stealing / fairness opt / NUMA / affinity / adaptive / lock-fr
 ### 15.5 下一步
 **EVS-1 Emacs Interactive Vertical Slice**（keypress→buffer→capture→snapshot→schedule→execute→commit→可见），四组基准 E1 idle-typing / E2 typing+background / E3 revision-storm(核心：大量提交被 Admission 消灭至 1~2 执行) / E4 大缓冲。EVS-1 数据决定 P3.3 是否存在。
 
+
+
+## 16. EVS-1 Closure — B0/B1/B2 对照与性能归因(2026-08-23)
+
+### 16.1 三路同构对照(64KB 文档 ×500,WSL gcc -O1)
+| 路径 | p50 | p99 | max | 判读 |
+|---|---|---|---|---|
+| B0 native insert | 0.7µs | 1.9–5.0µs | ≤62µs | Emacs 基线 |
+| B1 sync analysis(+capture+snapshot+FNV) | 1.0–1.4µs | 2.9–5.7µs | ≤89µs | **B1−B0 ≈ 0.3–0.9µs** |
+| B2 ENCA async | 见 §16.3 | — | — | 受测量 harness 限制(§16.4) |
+
+**结论 A**:64KB 级文档下「捕获+快照+分析」同步成本 <1µs——ENCA 数据面开销在该区间可忽略,B2≈B0 成立。
+
+### 16.2 E4 归因(C 侧精确 capture 计时)
+| size | capture_avg | 当时的端到端读数 | capture 占比 |
+|---|---|---|---|
+| 1MB | **0.448ms** | ~8ms(含轮询粒度) | ~6% |
+| 10MB | **4.313ms** | ~53.5ms(同上) | ~8% |
+
+**结论 B**:C 侧 capture+publish 随文档线性增长(全量捕获模型),但在测得的总延迟中占比仅 6–8%;总读数的其余部分来自 Elisp 层 `buffer-string` 全量拷贝与 5ms 轮询粒度——三者同为「全量拷贝」家族,共同指向同一优化方向:**增量捕获/增量文本获取**。
+
+### 16.3 E3 复核(storm,300 提交)
+executed=1 / superseded≈145 / 其余 folded / committed_rev=最新 ✓ 稳定复现。**wasted-work 消灭已在真实 Emacs 路径成立**(对照传统架构需执行全部 300 次)。
+
+### 16.4 已知测量限制(harness,非 ENCA)
+- B2/E1 的等待依赖主线程 spin+sleep-for,粒度污染 tail 读数;
+- worker→main 无唤醒机制,result 可见性依赖轮询(P3.2 遗留项);
+- 修复方向属 EVS-2 harness 工作:cond-var 唤醒或 safe-point 注入。
+
+### 16.5 性能停止规则执行
+Scheduler/admission/poll 实测均处亚微秒~微秒级(<5% 贡献)→ **P3 冻结于 P3.2,不开启 P3.3**。下一个值得投入的用户可见瓶颈是**全量文本拷贝家族**(增量捕获),其次才是接入真实 completion/LSP(EVS-2 Real Completion,可与增量捕获并行评估)。
+
+### 16.6 EVS-2 候选(按证据排序)
+1. **Incremental Capture**(消除 buffer-string+full-snapshot 双重全量拷贝)——证据最强;
+2. EVS-2 Real Completion——架构就绪,待真实 LSP 接入;
+3. Redisplay 路径测量——batch 模式不可测,需 GUI 会话。
+

@@ -226,7 +226,10 @@ enca_sched_submit (enca_scheduler *s, const enca_sched_task *in,
   /* Signal while holding the lock: a worker that checked queues and
      found them empty either has not entered cond_wait yet (it will
      re-check under the lock) or is already waiting and gets woken. */
-  enca_condition_signal (&s->wake);
+  /* Broadcast while holding the lock: with multiple waiters a single
+     signal can be consumed by the "wrong" worker, leaving another
+     asleep even though work remains. */
+  enca_condition_broadcast (&s->wake);
   enca_mutex_unlock (&s->lock);
   return res;
 }
