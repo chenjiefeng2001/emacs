@@ -160,3 +160,49 @@ Standing ban: reopening piece-table work to revisit the EVS-2.3 NO-GO.
 Range Snapshot / Region View remains banned until Real Completion
 measurements show Full Snapshot is the actual bottleneck
 (demand -> evidence -> API).
+
+## 26. ENCA Performance Freeze (2026-08-24, project re-scope)
+
+Measured shares of keypress->visible (real completion path,
+clangd backend, terminal presentation; REPORT.md sections 18-22):
+
+```text
+ENCA runtime total        < 0.1 ms   (capture+snapshot+scheduler+wakeup+transport)
+completion UI redisplay   ~2 ms      (tty forced-redisplay measurement)
+LSP backend (clangd)      78-92 ms   <- DOMINANT
+```
+
+Optimizing ENCA further (0.1 ms -> 0.05 ms) cannot move an ~80 ms
+user path.  The project is therefore re-scoped from "Next-Gen Emacs
+Core" to **ENCA Real Completion / Semantic Latency** (bench/enca/
+evs5/EVS5.md), and the core is frozen:
+
+### Closed
+
+```text
+P1 Runtime               CLOSED
+P2 Snapshot / Storage    CLOSED   (incl. incremental capture NO-GO)
+P3 Scheduler             CLOSED
+EVS-1 Synthetic path     CLOSED
+EVS-2 Incremental        CLOSED / NO-GO
+EVS-3 Wakeup             CLOSED
+EVS-4 Completion         CLOSED (4.0-4.4)
+EVS-5 Render Snapshot    NO-GO / CLOSED (no evidence)
+```
+
+### Permanently out of scope absent NEW user-path attribution
+
+multi-threaded Emacs UI, redisplay.c restructuring, parallel GC,
+allocator replacement, NUMA, work stealing, shared-memory LSP
+transport, SIMD JSON, Rust rewrite of Emacs core, custom GUI
+renderer.
+
+### Highest engineering policy
+
+> No architecture change without millisecond-scale user-path
+> attribution.
+
+Every closure above was produced BY this rule.  Reopening any item
+requires a new experiment that names the exact millisecond share of
+keypress->visible it would remove -- internal metrics (queue depth,
+MB/s, utilization) never qualify.

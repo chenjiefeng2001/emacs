@@ -731,3 +731,14 @@ popup redisplay 相对基线 ~60×,但绝对值仅 ~2ms。
 
 ### 22.5 项目级结论(证据链闭合)
 现代 IDE 差距不在 Emacs 边界、不在 JSON/IPC、不在 snapshot/scheduler/runtime,而在 (1) LSP backend 本身与 (2) 真实 completion UI 的集成质量。ENCA 已把「Emacs 自身可控的部分」压到微秒~亚毫秒级并全部冻结;后续任何优化必须先在 keypress→visible 上指认其毫秒级贡献,否则不做。
+
+
+
+## 23. Project Re-scope — ENCA Performance Freeze 与 EVS-5(2026-08-24)
+
+核心研究闭环完成:keypress→visible 的完整分解已经给出,**ENCA runtime <0.1ms、completion UI ~2ms、LSP backend 78–92ms(主导)**。据此:
+
+- **ENCA Performance Freeze** 生效(`src/enca/ARCHITECTURE.md` §26):P1/P2/P3/EVS-1..4 全部 CLOSED,EVS-5 Render Snapshot NO-GO;多线程 UI、redisplay 重构、并行 GC、allocator 替换、NUMA、work stealing、shared-memory LSP、SIMD JSON、Rust 化 core 全部出界;
+- **最高工程政策**:「没有毫秒级 user-path attribution,就没有架构改动」——以上每一项关闭都由该规则产生,重开任何一项需要新实验指认它将消除的精确毫秒份额;
+- 项目正式更名为 **ENCA Real Completion / Semantic Latency**,下一阶段唯一目标:把 78–92ms 的 backend 主导项打下来。三条冻结的研究方向:**D1 Backend Context Engineering、D2 Cancellation/Speculation、D3 Completion Cache**;
+- EVS-5.0 契约已冻结(`bench/enca/evs5/EVS5.md`):C1–C10 实验矩阵(cold/warm/narrowing/storm/cursor/edit/cancel/hit/miss/large-project)、缓存数据契约(不可变 refcounted 条目 + 区域失效)、阶段门禁 5.0→5.5。按指示,本阶段不写代码。
