@@ -666,3 +666,36 @@ Completion 请求**不获得文档**:只有 snapshot 引用 + 声明的 context range,经**现有
 
 ### 20.5 下一步
 EVS-4.3(单目标 clangd)的前置条件已满足:synthetic 切片证明 workload 形状成立、admission 在 IDE 型负载下行为正确、区域读取成本可忽略。剩余风险全部集中在 4.3/4.4 的传输层与 Completion UI/redisplay 归因。
+
+
+
+## 21. EVS-4.3 Closure — Real LSP Transport Attribution(2026-08-24,clangd 19.1.0)
+
+### 21.1 契约与实现(`bench/enca/evs4/EVS43.md`)
+Scheduler 保持业务无知——LSP 层位于 executor 钩子之下;会话生命周期独立于请求(spawn+initialize+didOpen 一次性 setup);**版本映射不变量**:LSP textDocument.version == ENCA revision;**提交资格四项纯门禁**:document_id ∧ generation ∧ revision ∧ ?cancelled——这是正确性机制,`$/cancelRequest` 只是优化层。
+
+### 21.2 三臂归因(B0/B1/B2)
+| 臂 | 路径 | round trip |
+|---|---|---|
+| B0 synthetic | 直接函数调用 | ~2μs |
+| **B1 loopback**(JSON-RPC + 真实 OS 管道) | 序列化 2.5μs + 解析 6.7μs + 内核管道 | **avg 8.12μs**(p_max 60μs,K=200) |
+| B2 clangd | 同 B1 + 真实服务器 | **p50 = 77ms**(p95=108ms;setup: spawn+initialize 83ms,didOpen 1MB=8ms) |
+
+```
+B1 ? B0 ≈ 数 μs   → JSON-RPC + IPC 开销
+B2 ? B1 ≈ 77ms    → clangd 处理,占 candidate-ready 的 >99%
+```
+
+### 21.3 判定:两条冻结规则同时触发
+- **GO-Transport**:传输占比 ~0.01% → JSON/IPC 正式判定为非瓶颈,**simd-json / shared-memory / 特殊 IPC 被本轮数据永久否证**(除非负载形状改变并附新证据);
+- **GO-Backend**:clangd 处理 >50% → 下一步属 backend/context 策略与 Completion UI 归因(EVS-4.4)。
+
+原始论点的诚实结论:**Dynamic Module 消灭 Emacs?ENCA 边界 JSON 的收益是真实的(μs 级),但现代 IDE 延迟差距不在这个边界上——它在 backend 与 UI。**
+
+### 21.4 工程记录
+- 手写最小 JSON-RPC codec(递归下降成员遍历,字符串逃逸感知);修复两轮真实缺陷:(a) 非匹配标量值误绑定 `{"a":1,"id":42}`→1;(b) 帧消费后 acc 未重置导致旧帧重放;(c) loopback 回显需排空(discipline:通知也必须读回自己的回显);
+- Windows 管道等待采用「自旋 2ms + Sleep(1) 兜底」混合策略,B1 归因保持微秒分辨率;
+- 全套件 **31978 checks / 0 failures**(storm-real 变体 31995/0),ASan 干净。
+
+### 21.5 下一步
+EVS-4.4:commit → candidate 转换 → completion-table → popup → redisplay → visible 的逐段归因。按 §5 GO-UI 规则,若 commit→visible 主导尾部延迟,主战场正式转移到 Emacs UI/redisplay。
