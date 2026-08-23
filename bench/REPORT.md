@@ -460,3 +460,39 @@ P3.1 最小 Task+Admission(本轮) → P3.2 最小调度器 → EVS-1 Emacs Inte
 ### 14.4 下一步
 P3.2 最小调度器(worker 线程 + 执行 + 结果回流,S1/S2 门禁)→ **EVS-1**(Emacs 键入→捕获→调度→执行→回调→可见,端到端 keypress→result 基准)。EVS-1 数据出来前,P3.3+ 不存在。
 
+
+
+## 15. P3.2 最小调度器执行器落地(2026-08-23)
+
+按压缩路线实现并验证。范围严格收窄：N worker + dispatch loop + result FIFO + lifecycle；其余全部禁止。
+
+### 15.1 实现
+- `enca_sched_start_workers(s, n, exec_fn, exec_ctx)`：业务无知执行钩子 `exec_fn(task, ctx, out_value)`；
+- Worker pop 内联**第二道 Admission 门**：generation 不匹配 / document revision 过期（oracle 回调）/ deadline 超时 → 各自 DROP 结果，绝不执行（#22 drop-before-compute 的运行时体现）；
+- 结果为堆节点 FIFO；`enca_sched_poll` 在调用线程交给 commit 回调——**worker 永不提交、调度器永不触碰 Emacs 状态**；
+- Shutdown 一等状态机 RUNNING→STOP_ACCEPTING→STOP_WORKERS→JOINED：期间 submits 被 REJECT(DROP_SHUTDOWN 计数)，排队任务以 DROPPED_SHUTDOWN 结果清空，join 干净。
+
+### 15.2 验证中发现并修复的两个真实并发缺陷
+1. **丢失唤醒死锁/延迟**：advance_generation 与 shutdown 的 broadcast 在队列锁外发射——worker 在「查空队列→进入 cond_wait」间隙会永久错过 → 两处均改为持锁 bump+broadcast（无丢失窗口）；submit 的 signal 同步移入锁内。
+2. **push-after-free race(TSan 抓到)**：sched_push_result 在 rlock 解锁后读 `r->status` 做计数，主线程 poll 可能已 free 该节点 → 计数移入临界区（TSan 0 warnings 确认）。
+
+### 15.3 测试与验证
+新增 sched-exec 四套件(+10042 checks)：X1/S1 单任务全生命周期、X2/S2 burst 5000 账目恒等式(submitted==accepted+folded+expired+rejects; accepted==results_total)、X3 stale-gate(generation bump 后零执行)、X6/S7 shutdown storm(STOP_ACCEPTING 拒绝+清场)。
+| 构建 | 结果 |
+|---|---|
+| Windows gcc -O1 ×3 | 22392 / 0 |
+| WSL -O0 -Werror | 22392 / 0 |
+| WSL TSan | **0 warnings**(修复前 6), 22389 / 0 |
+
+### 15.4 P3.2 Gate
+```text
+Correctness  lifecycle/queue/revalidate/cancel/deadline/gen/rev/shutdown/result-routing/no-worker-Emacs-mutation  ALL PASS
+Accounting   submitted=…恒等式 / every-drop-reasoned / no-double-release / no-lost-task                                            PASS
+Concurrency  ASan UBSan TSan shutdown-stress                                                                                       TSan+func PASS(local)
+Performance  S1/S2 p50..p99.9 queue/exec latency                                                                                  基础数据已采集,正式基准随 EVS-1
+NOT GATE     work stealing / fairness opt / NUMA / affinity / adaptive / lock-free                                                 明确不做
+```
+
+### 15.5 下一步
+**EVS-1 Emacs Interactive Vertical Slice**（keypress→buffer→capture→snapshot→schedule→execute→commit→可见），四组基准 E1 idle-typing / E2 typing+background / E3 revision-storm(核心：大量提交被 Admission 消灭至 1~2 执行) / E4 大缓冲。EVS-1 数据决定 P3.3 是否存在。
+
