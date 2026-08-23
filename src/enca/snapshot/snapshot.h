@@ -39,6 +39,7 @@ typedef struct enca_snapshot_epoch
 typedef struct enca_document enca_document;
 typedef struct enca_document_snapshot enca_document_snapshot;
 typedef struct enca_runtime enca_runtime;
+typedef struct enca_doc_state enca_doc_state;
 
 typedef struct enca_snapshot_system
 {
@@ -82,6 +83,13 @@ struct enca_document_snapshot
   enca_usize source_len;           /* raw metadata only in P2.0         */
 
   enca_utf8_view text;             /* canonical UTF-8, owned flat copy  */
+
+  /* Internal: incremental (piece-backed) storage.  NULL for flat
+     snapshots.  Callers must not interpret these fields; content
+     access goes through enca_snapshot_walk_text which handles both
+     representations (#EVS-2.2: storage kind never leaks). */
+  void *istorage;                  /* opaque piece table                */
+  void (*istorage_release) (void *storage);
 
   enca_snapshot_system *sys;       /* for release-side bookkeeping      */
 
@@ -186,5 +194,54 @@ bool enca_snapshot_epoch_current (const enca_document *doc,
    enca_task_input_destroy). */
 ENCA_NODISCARD enca_result enca_snap_submit_latest (enca_document *doc,
                                                     enca_runtime *rt);
+
+/* ---------------- EVS-2.2: incremental document state ---------------- */
+
+/* Piece-backed document state: edits produce new immutable snapshots
+   that share unchanged piece buffers with prior revisions (append-only
+   add-store; no in-place mutation, no coalescing in this phase).
+
+   External snapshot semantics are IDENTICAL to the flat path:
+   acquire/release/epoch/revision and text access via either the
+   contiguous view (flat) or the generic walk (both).  Callers never
+   see pieces, chunks or storage kind (#EVS-2.2.1). */
+typedef struct enca_doc_state enca_doc_state;
+
+enca_result enca_doc_state_create (enca_snapshot_system *sys,
+                                   enca_document *doc,
+                                   enca_doc_state **out);
+
+/* Apply one contiguous edit and publish a snapshot for the new
+   revision (auto-increments from 1).  When OUT is non-NULL it receives
+   one reference; release via enca_snapshot_release.  OUT may be NULL:
+   fire-and-forget publication (the snapshot becomes reclaimable on
+   the next publishing-thread sweep).
+   Offsets are canonical byte offsets with memmove-style clamping.
+   inserted data is copied once into an ENCA-owned buffer (#EVS-2.2.3:
+   no zero-copy from Emacs objects). */
+ENCA_NODISCARD enca_result
+enca_doc_state_edit (enca_doc_state *ds, size_t start_byte,
+                     size_t del_len, const void *ins_data,
+                     size_t ins_len, enca_document_snapshot **out);
+
+enca_usize enca_doc_state_length (const enca_doc_state *ds);
+enca_usize enca_doc_state_piece_count (const enca_doc_state *ds);
+double enca_doc_state_avg_piece_size (const enca_doc_state *ds);
+
+/* Cumulative payload bytes copied into fresh pieces by this doc state
+   (allocation-pressure proxy).  Sharing benefit is derivable as
+   alloc_bytes vs current length: revisions that only touch metadata
+   add no payload bytes.  Fragmentation metrics (piece count, avg size)
+   feed the future MAINTENANCE policy class (#EVS-2.2 scope ruling). */
+enca_usize enca_doc_state_alloc_bytes (const enca_doc_state *ds);
+
+void enca_doc_state_destroy (enca_doc_state *ds);
+
+/* Sequential text access -- works for BOTH flat and incremental
+   snapshots.  fn returns false to stop early. */
+typedef bool (*enca_text_walk_fn) (const unsigned char *data,
+                                   size_t len, void *ctx);
+void enca_snapshot_walk_text (const enca_document_snapshot *s,
+                              enca_text_walk_fn fn, void *ctx);
 
 #endif /* ENCA_SNAPSHOT_H */
