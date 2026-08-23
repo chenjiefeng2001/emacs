@@ -1790,6 +1790,10 @@ if test "$enable_enca" = yes; then
   ENCA_OBJ="$ENCA_OBJ enca/runtime/runtime.o enca/thread/thread.o"
   ENCA_OBJ="$ENCA_OBJ enca/snapshot/snapshot.o enca/scheduler/scheduler.o"
   ENCA_OBJ="$ENCA_OBJ enca/time/clock.o enca/trace/profiler.o"
+  dnl EVS-1 vertical slice glue (interactive path).
+  AC_DEFINE([HAVE_ENCA_EVS], [1],
+    [Define to 1 if the EVS-1 vertical slice is linked into Emacs.])
+  ENCA_OBJ="$ENCA_OBJ enca-evs.o"
   ENCA_OBJ="$ENCA_OBJ enca/trace/trace.o"
 fi
 AC_SUBST([ENCA_OBJ])
@@ -6375,7 +6379,7 @@ AC_CHECK_FUNCS_ONCE([__lsan_ignore_object])
 
 AC_FUNC_FORK
 
-dnl AC_CHECK_FUNCS_ONCE wouldn’t be right for snprintf, which needs
+dnl AC_CHECK_FUNCS_ONCE wouldn?? be right for snprintf, which needs
 dnl the current CFLAGS etc.
 AC_CHECK_FUNCS([snprintf open_memstream])
 

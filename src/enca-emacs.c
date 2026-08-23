@@ -245,6 +245,11 @@ syms_of_enca (void)
   defsubr (&Senca_cancel);
   defsubr (&Senca_status);
   defsubr (&Senca_shutdown);
+
+#ifdef HAVE_ENCA_EVS
+  void syms_of_enca_evs (void);
+  syms_of_enca_evs ();
+#endif
 }
 
 #endif /* HAVE_ENCA */

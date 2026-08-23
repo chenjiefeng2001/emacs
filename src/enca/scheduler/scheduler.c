@@ -1,3 +1,9 @@
+#ifdef emacs
+/* Building inside Emacs: pick up its configuration first, so that
+   gnulib's wrapped system headers are used consistently.  */
+# include <config.h>
+#endif
+
 #include "scheduler.h"
 
 #include "../base/assert.h"
