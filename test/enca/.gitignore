@@ -8,3 +8,8 @@ trace-dump-test.json
 rt_out*.txt
 rt_err*.txt
 !Makefile
+*.exp
+*.lib
+*.pdb
+*.ilk
+rt.txt

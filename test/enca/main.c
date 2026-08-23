@@ -63,6 +63,7 @@ main (void)
   void run_test_runtime (void);
   void run_test_snapshot (void);
   void run_test_sched_exec (void);
+  void run_test_dstate (void);
   void run_test_scheduler (void);
 
   run_test_base ();
@@ -80,6 +81,7 @@ main (void)
   run_test_runtime ();
   run_test_snapshot ();
   run_test_sched_exec ();
+  run_test_dstate ();
   run_test_scheduler ();
 
   printf ("\n%d checks, %d failures\n", enca_test_checks,

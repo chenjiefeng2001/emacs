@@ -39,7 +39,8 @@ TEST_SRC = \
 	test_trace_perf.c \
 	test_runtime.c \
 	test_snapshot.c \
-	test_scheduler.c
+	test_scheduler.c \
+	test_dstate.c
 
 all: enca_tests
 
