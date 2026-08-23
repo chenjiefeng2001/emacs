@@ -406,10 +406,74 @@ test_dstate_torture (void)
   enca_idr_destroy (&reg);
 }
 
+/* EVS-2.3 adapter primitive: an externally-built (piece-backed)
+   snapshot must become visible through the standard document slot
+   with correct revision bookkeeping, and superseding it must keep
+   older snapshots readable (#18). */
+static void
+test_dstate_adopt (void)
+{
+  enca_id_registry reg;
+  enca_snapshot_system sys;
+  enca_document *doc = NULL;
+  enca_doc_state *ds = NULL;
+
+  CHECK_EQ_U64 (enca_idr_init (&reg), ENCA_OK);
+  CHECK_EQ_U64 (enca_snap_init (&sys, &reg), ENCA_OK);
+  CHECK_EQ_U64 (enca_document_create (&sys, &doc), ENCA_OK);
+  CHECK_EQ_U64 (enca_doc_state_create (&sys, doc, &ds), ENCA_OK);
+
+  unsigned char ref[4096];
+  size_t rlen = 0;
+
+  const unsigned char a[] = "AAA";
+  enca_document_snapshot *s1 = NULL;
+  CHECK (apply_and_verify (ds, ref, &rlen, 0, 0, a, 3, &s1));
+  enca_u64 rev1 = s1->epoch.document_revision;
+
+  /* Adopt revision 1: document slot and revision must follow. */
+  enca_document_adopt_snapshot (doc, s1);       /* s1 ref -> slot    */
+  CHECK_EQ_U64 ((int) enca_document_revision (doc), (int) rev1);
+  enca_document_snapshot *got = enca_document_latest_acquire (doc);
+  CHECK (got != NULL);
+  CHECK_EQ_U64 (snap_fnv (got), snap_fnv (s1));
+  enca_snapshot_release (got);
+
+  const unsigned char b[] = "BBB";
+  enca_document_snapshot *s2 = NULL;
+  CHECK (apply_and_verify (ds, ref, &rlen, rlen, 0, b, 3, &s2));
+  enca_u64 rev2 = s2->epoch.document_revision;
+  CHECK (rev2 > rev1);
+
+  /* Hold a task-like reference to revision 1, then adopt revision 2:
+     the slot moves on while the old snapshot stays byte-identical. */
+  enca_document_snapshot *inflight = enca_snapshot_acquire (s1);
+  enca_document_adopt_snapshot (doc, s2);       /* s2 ref -> slot    */
+  CHECK_EQ_U64 ((int) enca_document_revision (doc), (int) rev2);
+  got = enca_document_latest_acquire (doc);
+  CHECK_EQ_U64 (snap_fnv (got), snap_fnv (s2));
+  enca_snapshot_release (got);
+  CHECK_EQ_U64 (snap_fnv (inflight),
+                ref_hash (ref, rlen - 3));      /* prefix content    */
+
+  enca_snapshot_release (inflight);
+  enca_doc_state_destroy (ds);
+  enca_document_destroy (doc);                  /* releases slot     */
+  enca_snap_reclaim (&sys);
+
+  enca_snap_stats st;
+  enca_snap_stats_get (&sys, &st);
+  CHECK_EQ_U64 (st.created, st.destroyed);
+  CHECK_EQ_U64 (st.live, 0);
+  CHECK_EQ_U64 (enca_idr_live_count (&reg), 0);
+  enca_idr_destroy (&reg);
+}
+
 void
 run_test_dstate (void)
 {
   enca_test_run_suite ("dstate/basic", test_dstate_basic);
   enca_test_run_suite ("dstate/retention", test_dstate_retention);
   enca_test_run_suite ("dstate/torture", test_dstate_torture);
+  enca_test_run_suite ("dstate/adopt", test_dstate_adopt);
 }

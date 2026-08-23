@@ -154,6 +154,17 @@ enca_snapshot_publish (enca_snapshot_system *sys, enca_document *doc,
                        enca_u64 runtime_generation,
                        enca_document_snapshot **out);
 
+/* Adapter-side adoption (EVS-2.3): route an externally-built snapshot
+   (e.g. from enca_doc_state_edit) through the standard document slot
+   so latest_acquire and revision-based commit validation see it.
+   Transfers the CALLER's reference into the publisher slot exactly
+   like enca_snapshot_publish does internally; bumps the document's
+   current revision to SNAPSHOT's epoch revision and releases the
+   superseded latest.  Publishing thread only; epoch fields are not
+   modified here (generation is owned by whoever built the snapshot). */
+void enca_document_adopt_snapshot (enca_document *doc,
+                                   enca_document_snapshot *snap);
+
 /* Pure ownership: refcount increment only (SNAPSHOT.md L1).  NULL
    propagates. */
 enca_document_snapshot *enca_snapshot_acquire (enca_document_snapshot *s);

@@ -274,6 +274,24 @@ enca_document_latest_acquire (enca_document *doc)
   return s;
 }
 
+void
+enca_document_adopt_snapshot (enca_document *doc,
+                              enca_document_snapshot *snap)
+{
+  if (!doc || !snap)
+    return;
+
+  enca_mutex_lock (&doc->publish_lock);
+  atomic_store_explicit (&doc->revision, snap->epoch.document_revision,
+                         memory_order_release);
+  enca_document_snapshot *old = doc->latest;
+  doc->latest = snap;           /* caller's reference becomes the slot */
+  enca_mutex_unlock (&doc->publish_lock);
+
+  /* Outside the lock: destruction takes no document locks. */
+  enca_snapshot_release (old);
+}
+
 /* ---------------------------------------------------------------- */
 /* Commit validation                                                */
 
