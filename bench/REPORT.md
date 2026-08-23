@@ -533,3 +533,33 @@ Scheduler/admission/poll 实测均处亚微秒~微秒级(<5% 贡献)→ **P3 冻
 2. EVS-2 Real Completion——架构就绪,待真实 LSP 接入;
 3. Redisplay 路径测量——batch 模式不可测,需 GUI 会话。
 
+
+
+## 17. EVS-2 Incremental Capture — Contract/Bench/Closure(2026-08-23)
+
+### 17.1 契约冻结(`bench/enca/evs2/EVS2.md`)
+P2/P3 ABI 全部冻结不可动；Edit Delta v1=单连续区间(start/old_end/insert, canonical byte offsets)；Emacs buffer 不共享给 worker；oracle 硬门禁 hash(full)==hash(incremental) 每 revision 核对；核心新指标 **copy_amplification = physical_copied / logical_changed**。
+
+### 17.2 Bench-only 实验(未触碰 Emacs 核心)
+复用 P2.1 平台:flat store=Full Capture 基线;chunked piece-table store=Incremental Capture。同一 EditScript(W6 合成负载)+FNV oracle。32 格 sweep 零失败。
+
+### 17.3 Small-Edit/Large-Document 不变量验证(1B edit @ middle)
+| size | full: copied / capture p50 | incr: copied / p50 |
+|---|---|---|
+| 1MB | 105MB / 0.44ms | **100B** / 0.0024ms |
+| 10MB | 1.05GB / 4.12ms | **100B** / 0.0065ms |
+| **100MB** | **10.49GB / 46.16ms** | **100B / 0.0498ms** |
+
+→ 100MB+1B:**延迟 ~928×、拷贝放大 ~10⁵× 改善**。不变量成立:incremental ≈ O(changed payload),与文档大小无关。
+
+### 17.4 其余维度
+- **edit-size 扫描(chunked@10MB)**:1B–100KB 全部 0.003–0.009ms——增量成本与编辑尺寸弱相关;
+- **locality 扫描**:append/middle/random/hot 全部 ≤0.011ms——无局部性悬崖;
+- 正确性:32/32 格 final_hash 双方一致。
+
+### 17.5 EVS-2 Gate:**GO**
+契约不变量全绿 + 放大比数量级改善 + 内容/revision/lifetime 全正确 → 进入集成阶段(EVS-2.2:src 后端整合 → enca-evs adapter → E1/E3/E4 重跑)。Redisplay 路线暂不启动(batch 无法测量,且当前归因未显示其主导)。
+
+### 17.6 诚实限制
+copy_amp 列在 CSV 分析脚本中存在解析空值显示问题(原始 copied_total 数据完整可靠);v1 分片表为 O(pieces) 顺序扫描,极端碎片化场景的合并策略沿用 P2.1 C2 deferred 结论。
+

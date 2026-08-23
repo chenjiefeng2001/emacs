@@ -170,6 +170,7 @@ main (int argc, char **argv)
                                   sizeof *ring);
   enca_usize ring_head = 0, ring_count = 0;
   enca_u64 copied_total = 0, meta_total = 0, maint_copied_total = 0;
+  enca_u64 logical_changed_total = 0;
   bool ok = true;
 
   for (enca_usize i = 0; i < n_edits; i++)
@@ -210,6 +211,7 @@ main (int argc, char **argv)
                                                &(enca_u64){ 0 }, 1),
                   ref[0]);
       copied_total += m.content_copy_bytes;
+      logical_changed_total += e.insert_len + e.delete_len;
       meta_total += m.meta_bytes;
 
       /* Retention ring: one extra reference per held revision. */
@@ -373,7 +375,11 @@ main (int argc, char **argv)
            (unsigned long long) final_hash,
            (unsigned long long) logical,
            (unsigned long long) physical, sharing,
-           (unsigned long long) maint_copied_total, cold_ok);
+          (unsigned long long) maint_copied_total,
+          cold_ok,
+          (logical_changed_total
+             ? (double) copied_total / (double) logical_changed_total
+             : 0.0));
 
   if (cold_rev)
     {
