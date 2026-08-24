@@ -609,153 +609,153 @@ Copy amplification:incremental è‡‚ copied==changed=104,869,888B â†’ **æ°ä¸º 1.0
 
 
 
-## 19. EVS-3 Closure ¡ª Main-thread Wakeup:Ïû³ı 20ms ²âÁ¿µØ°å(2026-08-24)
+## 19. EVS-3 Closure â€” Main-thread Wakeup:æ¶ˆé™¤ 20ms æµ‹é‡åœ°æ¿(2026-08-24)
 
-### 19.1 ÊµÏÖ(EVS-3.0,ÆõÔ¼ÏÈĞĞ:`bench/enca/evs3/EVS3.md`)
-- `enca/wake/wake.{h,c}`:Runtime Notification Ô­Óï(token + mutex + condvar µÄÑÏ¸ñĞ­Òé;IDLE/NOTIFIED/MAIN_DRAINING ÓïÒå¡¢coalescing¡¢produce-then-notify / drain-then-wait ¹æÔòÓë¶ª»½ĞÑÖ¤Ã÷Ğ´ÈëÆõÔ¼);
-- scheduler Ôö¼Ó¿ÉÑ¡ÒµÎñÎŞÖª observer(`result_notify`,Ò¶×Ó°²È«Ô¼Êø),ÔÚ½á¹ûÈë¶Óºó´¥·¢¡ª¡ªscheduler ²»ÖªÏş Emacs;
-- **EVS-3 ÃÅ½û×¥µ½´æÁ¿È±¿Ú**:ÎÄµµĞû³ÆµÄ STOP_ACCEPTING Ìá½»ÃÅ´ÓÎ´ÊµÏÖ(`shutdown_rejects` ¼ÆÊıÆ÷´æÔÚµ«ÎŞÈËµİÔö,shutdown ºóÌá½»»á¾²Ä¬Èë¶Ó)¡ú ²¹ÉÏ lifecycle ¼ì²é,wake/shutdown Ì×¼ş¸²¸Ç;
-- ÆßÌ×¼ş:single/burst/drain-race/notify-during-drain/producer-storm/shutdown/generation-reset¡£**24318/0 ¡Á3 native + ASan clean + TSan(WSL gcc)0 warnings**¡ª¡ªË³´ø²¹Æë EVS-2 ÒÅÁôµÄ TSan Ö¤¾İ(È«²¢·¢Ãæ)¡£
+### 19.1 å®ç°(EVS-3.0,å¥‘çº¦å…ˆè¡Œ:`bench/enca/evs3/EVS3.md`)
+- `enca/wake/wake.{h,c}`:Runtime Notification åŸè¯­(token + mutex + condvar çš„ä¸¥æ ¼åè®®;IDLE/NOTIFIED/MAIN_DRAINING è¯­ä¹‰ã€coalescingã€produce-then-notify / drain-then-wait è§„åˆ™ä¸ä¸¢å”¤é†’è¯æ˜å†™å…¥å¥‘çº¦);
+- scheduler å¢åŠ å¯é€‰ä¸šåŠ¡æ— çŸ¥ observer(`result_notify`,å¶å­å®‰å…¨çº¦æŸ),åœ¨ç»“æœå…¥é˜Ÿåè§¦å‘â€”â€”scheduler ä¸çŸ¥æ™“ Emacs;
+- **EVS-3 é—¨ç¦æŠ“åˆ°å­˜é‡ç¼ºå£**:æ–‡æ¡£å®£ç§°çš„ STOP_ACCEPTING æäº¤é—¨ä»æœªå®ç°(`shutdown_rejects` è®¡æ•°å™¨å­˜åœ¨ä½†æ— äººé€’å¢,shutdown åæäº¤ä¼šé™é»˜å…¥é˜Ÿ)â†’ è¡¥ä¸Š lifecycle æ£€æŸ¥,wake/shutdown å¥—ä»¶è¦†ç›–;
+- ä¸ƒå¥—ä»¶:single/burst/drain-race/notify-during-drain/producer-storm/shutdown/generation-resetã€‚**24318/0 Ã—3 native + ASan clean + TSan(WSL gcc)0 warnings**â€”â€”é¡ºå¸¦è¡¥é½ EVS-2 é—ç•™çš„ TSan è¯æ®(å…¨å¹¶å‘é¢)ã€‚
 
-### 19.2 EVS-3.1 ĞÔÄÜ(ÕæÊµ Emacs ¹¹½¨,Í¬ A/B harness)
-| ³¡¾° | µØ°åÆÚ p50 | wakeup ºó p50 |
+### 19.2 EVS-3.1 æ€§èƒ½(çœŸå® Emacs æ„å»º,åŒ A/B harness)
+| åœºæ™¯ | åœ°æ¿æœŸ p50 | wakeup å p50 |
 |---|---|---|
 | E1 idle-typing(full) | ~19.3ms | **0.083ms** |
 | E1 idle-typing(incr) | ~19.5ms | **0.0008ms** |
-| E4 1MB | ~17¨C20ms | 4.3¨C6.2ms |
-| E4 10MB | ~54¨C76ms | incr 37¨C42ms / full 43¨C76ms |
-| E4 100MB | ~452¨C485ms | ~386¨C624ms(·ÖÎöÖ÷µ¼) |
+| E4 1MB | ~17â€“20ms | 4.3â€“6.2ms |
+| E4 10MB | ~54â€“76ms | incr 37â€“42ms / full 43â€“76ms |
+| E4 100MB | ~452â€“485ms | ~386â€“624ms(åˆ†æä¸»å¯¼) |
 
-~20ms µØ°å ¡ú Î¢Ãë¼¶¡£µØ°åÒÆ³ıºóÊ×´Î¹«Æ½µØ¿´µ½²¶»ñ³É±¾:10MB ´¦ÔöÁ¿±ÛÎÈ¶¨¿ì ~20%(40 vs 55ms);100MB ±»ºÏ³ÉÈ«ÎÄ·ÖÎö(~400ms+)Ö÷µ¼,Ë«±Û´òÆ½¡ª¡ªÓë EVS-2 NO-GO ½áÂÛÒ»ÖÂ¡£
+~20ms åœ°æ¿ â†’ å¾®ç§’çº§ã€‚åœ°æ¿ç§»é™¤åé¦–æ¬¡å…¬å¹³åœ°çœ‹åˆ°æ•è·æˆæœ¬:10MB å¤„å¢é‡è‡‚ç¨³å®šå¿« ~20%(40 vs 55ms);100MB è¢«åˆæˆå…¨æ–‡åˆ†æ(~400ms+)ä¸»å¯¼,åŒè‡‚æ‰“å¹³â€”â€”ä¸ EVS-2 NO-GO ç»“è®ºä¸€è‡´ã€‚
 
-### 19.3 ÅĞ¶¨
-- EVS-3 = **³É¹¦**:Ä¿±ê¾ÍÊÇµØ°å±¾Éí,keypress¡úcommit ÔÚĞ¡ÎÄµµ´ïµ½Î¢Ãë¼¶;
-- EVS-2 NO-GO Î¬³Ö²»±ä(¡ì18),¼Ü¹¹¶³½á¿éÒÑĞ´Èë `src/enca/ARCHITECTURE.md` ¡ì25;
-- ÏÂÒ»¸öÖ÷µ¼³É±¾ÒÑ¿É²âÁ¿:**´óÎÄµµÏÂÊÇ"Ã¿ revision È«ÎÄµµ·ÖÎö"µÄ¹¤×÷¸ºÔØÄ£ĞÍ**¡ª¡ªÕâÕıÊÇ Real Completion(ÇøÓòĞÍÏû·ÑÕß)µÄ¶¯»úÖ¤¾İ;GUI Redisplay ·ÖÖ§ÈÔ´ı GUI »á»°Êı¾İ¡£
+### 19.3 åˆ¤å®š
+- EVS-3 = **æˆåŠŸ**:ç›®æ ‡å°±æ˜¯åœ°æ¿æœ¬èº«,keypressâ†’commit åœ¨å°æ–‡æ¡£è¾¾åˆ°å¾®ç§’çº§;
+- EVS-2 NO-GO ç»´æŒä¸å˜(Â§18),æ¶æ„å†»ç»“å—å·²å†™å…¥ `src/enca/ARCHITECTURE.md` Â§25;
+- ä¸‹ä¸€ä¸ªä¸»å¯¼æˆæœ¬å·²å¯æµ‹é‡:**å¤§æ–‡æ¡£ä¸‹æ˜¯"æ¯ revision å…¨æ–‡æ¡£åˆ†æ"çš„å·¥ä½œè´Ÿè½½æ¨¡å‹**â€”â€”è¿™æ­£æ˜¯ Real Completion(åŒºåŸŸå‹æ¶ˆè´¹è€…)çš„åŠ¨æœºè¯æ®;GUI Redisplay åˆ†æ”¯ä»å¾… GUI ä¼šè¯æ•°æ®ã€‚
 
 
 
-## 20. EVS-4.1/4.2 ¡ª Synthetic Completion Slice(2026-08-24)
+## 20. EVS-4.1/4.2 â€” Synthetic Completion Slice(2026-08-24)
 
-### 20.1 ÆõÔ¼¶³½á(`bench/enca/evs4/COMPLETION.md`)
-Completion ÇëÇó**²»»ñµÃÎÄµµ**:Ö»ÓĞ snapshot ÒıÓÃ + ÉùÃ÷µÄ context range,¾­**ÏÖÓĞ** `enca_snapshot_walk_text` ¶ÁÈ¡¡ª¡ªÁãĞÂ Snapshot API¡£W1¨CW4(Ç°×º/³ÉÔ±/Êµ²Î/Óï·¨)´°¿Ú 32B¨C4KB ¶³½á;C1¨CC4 = 64KB/1MB/10MB/100MB;simd-json¡¢tree-sitter¡¢Range View È«²¿ÏÔÊ½³ö½ç¡£
+### 20.1 å¥‘çº¦å†»ç»“(`bench/enca/evs4/COMPLETION.md`)
+Completion è¯·æ±‚**ä¸è·å¾—æ–‡æ¡£**:åªæœ‰ snapshot å¼•ç”¨ + å£°æ˜çš„ context range,ç»**ç°æœ‰** `enca_snapshot_walk_text` è¯»å–â€”â€”é›¶æ–° Snapshot APIã€‚W1â€“W4(å‰ç¼€/æˆå‘˜/å®å‚/è¯­æ³•)çª—å£ 32Bâ€“4KB å†»ç»“;C1â€“C4 = 64KB/1MB/10MB/100MB;simd-jsonã€tree-sitterã€Range View å…¨éƒ¨æ˜¾å¼å‡ºç•Œã€‚
 
-### 20.2 O(region) Ô¤ËãÃÅ½û(CONTRACT ¡ì8)
-| ÎÄµµ´óĞ¡ | 256B ÇøÓòÌáÈ¡ avg | piece Êı |
+### 20.2 O(region) é¢„ç®—é—¨ç¦(CONTRACT Â§8)
+| æ–‡æ¡£å¤§å° | 256B åŒºåŸŸæå– avg | piece æ•° |
 |---|---|---|
-| 1MB | 1.46¦Ìs | 801 |
-| 8MB | 2.75¦Ìs | 801 |
-| 10MB | 2.66¦Ìs | 801 |
-| **100MB** | **3.14¦Ìs** | 801 |
+| 1MB | 1.46Î¼s | 801 |
+| 8MB | 2.75Î¼s | 801 |
+| 10MB | 2.66Î¼s | 801 |
+| **100MB** | **3.14Î¼s** | 801 |
 
-ÎÄµµ ¡Á100 Ôö³¤,ÌáÈ¡³É±¾ºã¶¨Î¢Ãë¼¶(ÔöÁ¿À´×Ô ~800 Æ¬¶ÎµÄÔªÊı¾İÉ¨Ãè)¡£**Range View ½ûÁî»ñµÃÓÀ¾ÃÊı¾İÖ§³Å**:ÇøÓò¶ÁÈ¡¾àÈÎºÎ¿É¸ĞÖªÑÓ³Ù²î 4 ¸öÊıÁ¿¼¶¡£
+æ–‡æ¡£ Ã—100 å¢é•¿,æå–æˆæœ¬æ’å®šå¾®ç§’çº§(å¢é‡æ¥è‡ª ~800 ç‰‡æ®µçš„å…ƒæ•°æ®æ‰«æ)ã€‚**Range View ç¦ä»¤è·å¾—æ°¸ä¹…æ•°æ®æ”¯æ’‘**:åŒºåŸŸè¯»å–è·ä»»ä½•å¯æ„ŸçŸ¥å»¶è¿Ÿå·® 4 ä¸ªæ•°é‡çº§ã€‚
 
 ### 20.3 Completion Storm(EVS-4.2)
-| ´ò×Ö¼ä¸ô | Áãºó¶ËÑÓ³Ù | ºó¶Ë 5ms | ºó¶Ë 20ms(clangd ¼¶) |
+| æ‰“å­—é—´éš” | é›¶åç«¯å»¶è¿Ÿ | åç«¯ 5ms | åç«¯ 20ms(clangd çº§) |
 |---|---|---|---|
 | storm(0ms) | **executed=1/12** | 1/12 | 1/12 |
 | 2ms | 12/12 | 12/12 | 9/12 |
 | 10ms | 12/12 | 12/12 | 10/12 |
 | 50ms | 12/12 | 12/12 | 12/12 |
 
-½áÂÛ:(a) ÕæÕıµÄÊäÈë·ç±©ÏÂ drop-before-compute ÍêÃÀ(1/12 Ö´ĞĞ);(b) ºÏ³É server Ì«¿ìÊ±¶ÓÁĞÓÀ²»»ıÑ¹¡ª¡ªsupersession ÎŞÊÂ¿É×öÊÇ**ºÃ**ÏûÏ¢;(c) ÒıÈëÕæÊµºó¶ËÑÓ³Ùºó,ÅÅ¶ÓÈÎÎñ±» REPLACE ÏûÃğ,¶ø**Ö´ĞĞÖĞÈÎÎñ²»ÊÜÓ°Ïì**(2ms ±Û 9/12)¡ª¡ªÕâÕıÊÇ #23 µÄ±ß½ç:in-flight ±£»¤ÊôĞ­×÷È¡Ïû(EVS-4.3 ½ÓÕæÊµ LSP Ê±½ÓÏß)¡£
+ç»“è®º:(a) çœŸæ­£çš„è¾“å…¥é£æš´ä¸‹ drop-before-compute å®Œç¾(1/12 æ‰§è¡Œ);(b) åˆæˆ server å¤ªå¿«æ—¶é˜Ÿåˆ—æ°¸ä¸ç§¯å‹â€”â€”supersession æ— äº‹å¯åšæ˜¯**å¥½**æ¶ˆæ¯;(c) å¼•å…¥çœŸå®åç«¯å»¶è¿Ÿå,æ’é˜Ÿä»»åŠ¡è¢« REPLACE æ¶ˆç­,è€Œ**æ‰§è¡Œä¸­ä»»åŠ¡ä¸å—å½±å“**(2ms è‡‚ 9/12)â€”â€”è¿™æ­£æ˜¯ #23 çš„è¾¹ç•Œ:in-flight ä¿æŠ¤å±åä½œå–æ¶ˆ(EVS-4.3 æ¥çœŸå® LSP æ—¶æ¥çº¿)ã€‚
 
-### 20.4 ÕıÈ·ĞÔÓëÑéÖ¤
-- ct/extract-oracle:Í¬Ò»ÄÚÈİ¾­ flat Óë piece-backed Á½ÖÖ´æ´¢,21 ¸öÇøÓò×éºÏÖğÒ»Óë¾µÏñ buffer ×Ö½Ú±È¶ÔÈ«µÈ;
-- ct/basic / o-region-budget / storm;È«Ì×¼ş **31750 checks / 0 failures** native,ASan clean,**TSan(WSL gcc)0 warnings / 31747 / 0**¡£
+### 20.4 æ­£ç¡®æ€§ä¸éªŒè¯
+- ct/extract-oracle:åŒä¸€å†…å®¹ç» flat ä¸ piece-backed ä¸¤ç§å­˜å‚¨,21 ä¸ªåŒºåŸŸç»„åˆé€ä¸€ä¸é•œåƒ buffer å­—èŠ‚æ¯”å¯¹å…¨ç­‰;
+- ct/basic / o-region-budget / storm;å…¨å¥—ä»¶ **31750 checks / 0 failures** native,ASan clean,**TSan(WSL gcc)0 warnings / 31747 / 0**ã€‚
 
-### 20.5 ÏÂÒ»²½
-EVS-4.3(µ¥Ä¿±ê clangd)µÄÇ°ÖÃÌõ¼şÒÑÂú×ã:synthetic ÇĞÆ¬Ö¤Ã÷ workload ĞÎ×´³ÉÁ¢¡¢admission ÔÚ IDE ĞÍ¸ºÔØÏÂĞĞÎªÕıÈ·¡¢ÇøÓò¶ÁÈ¡³É±¾¿ÉºöÂÔ¡£Ê£Óà·çÏÕÈ«²¿¼¯ÖĞÔÚ 4.3/4.4 µÄ´«Êä²ãÓë Completion UI/redisplay ¹éÒò¡£
+### 20.5 ä¸‹ä¸€æ­¥
+EVS-4.3(å•ç›®æ ‡ clangd)çš„å‰ç½®æ¡ä»¶å·²æ»¡è¶³:synthetic åˆ‡ç‰‡è¯æ˜ workload å½¢çŠ¶æˆç«‹ã€admission åœ¨ IDE å‹è´Ÿè½½ä¸‹è¡Œä¸ºæ­£ç¡®ã€åŒºåŸŸè¯»å–æˆæœ¬å¯å¿½ç•¥ã€‚å‰©ä½™é£é™©å…¨éƒ¨é›†ä¸­åœ¨ 4.3/4.4 çš„ä¼ è¾“å±‚ä¸ Completion UI/redisplay å½’å› ã€‚
 
 
 
-## 21. EVS-4.3 Closure ¡ª Real LSP Transport Attribution(2026-08-24,clangd 19.1.0)
+## 21. EVS-4.3 Closure â€” Real LSP Transport Attribution(2026-08-24,clangd 19.1.0)
 
-### 21.1 ÆõÔ¼ÓëÊµÏÖ(`bench/enca/evs4/EVS43.md`)
-Scheduler ±£³ÖÒµÎñÎŞÖª¡ª¡ªLSP ²ãÎ»ÓÚ executor ¹³×ÓÖ®ÏÂ;»á»°ÉúÃüÖÜÆÚ¶ÀÁ¢ÓÚÇëÇó(spawn+initialize+didOpen Ò»´ÎĞÔ setup);**°æ±¾Ó³Éä²»±äÁ¿**:LSP textDocument.version == ENCA revision;**Ìá½»×Ê¸ñËÄÏî´¿ÃÅ½û**:document_id ¡Ä generation ¡Ä revision ¡Ä ?cancelled¡ª¡ªÕâÊÇÕıÈ·ĞÔ»úÖÆ,`$/cancelRequest` Ö»ÊÇÓÅ»¯²ã¡£
+### 21.1 å¥‘çº¦ä¸å®ç°(`bench/enca/evs4/EVS43.md`)
+Scheduler ä¿æŒä¸šåŠ¡æ— çŸ¥â€”â€”LSP å±‚ä½äº executor é’©å­ä¹‹ä¸‹;ä¼šè¯ç”Ÿå‘½å‘¨æœŸç‹¬ç«‹äºè¯·æ±‚(spawn+initialize+didOpen ä¸€æ¬¡æ€§ setup);**ç‰ˆæœ¬æ˜ å°„ä¸å˜é‡**:LSP textDocument.version == ENCA revision;**æäº¤èµ„æ ¼å››é¡¹çº¯é—¨ç¦**:document_id âˆ§ generation âˆ§ revision âˆ§ ?cancelledâ€”â€”è¿™æ˜¯æ­£ç¡®æ€§æœºåˆ¶,`$/cancelRequest` åªæ˜¯ä¼˜åŒ–å±‚ã€‚
 
-### 21.2 Èı±Û¹éÒò(B0/B1/B2)
-| ±Û | Â·¾¶ | round trip |
+### 21.2 ä¸‰è‡‚å½’å› (B0/B1/B2)
+| è‡‚ | è·¯å¾„ | round trip |
 |---|---|---|
-| B0 synthetic | Ö±½Óº¯Êıµ÷ÓÃ | ~2¦Ìs |
-| **B1 loopback**(JSON-RPC + ÕæÊµ OS ¹ÜµÀ) | ĞòÁĞ»¯ 2.5¦Ìs + ½âÎö 6.7¦Ìs + ÄÚºË¹ÜµÀ | **avg 8.12¦Ìs**(p_max 60¦Ìs,K=200) |
-| B2 clangd | Í¬ B1 + ÕæÊµ·şÎñÆ÷ | **p50 = 77ms**(p95=108ms;setup: spawn+initialize 83ms,didOpen 1MB=8ms) |
+| B0 synthetic | ç›´æ¥å‡½æ•°è°ƒç”¨ | ~2Î¼s |
+| **B1 loopback**(JSON-RPC + çœŸå® OS ç®¡é“) | åºåˆ—åŒ– 2.5Î¼s + è§£æ 6.7Î¼s + å†…æ ¸ç®¡é“ | **avg 8.12Î¼s**(p_max 60Î¼s,K=200) |
+| B2 clangd | åŒ B1 + çœŸå®æœåŠ¡å™¨ | **p50 = 77ms**(p95=108ms;setup: spawn+initialize 83ms,didOpen 1MB=8ms) |
 
 ```
-B1 ? B0 ¡Ö Êı ¦Ìs   ¡ú JSON-RPC + IPC ¿ªÏú
-B2 ? B1 ¡Ö 77ms    ¡ú clangd ´¦Àí,Õ¼ candidate-ready µÄ >99%
+B1 ? B0 â‰ˆ æ•° Î¼s   â†’ JSON-RPC + IPC å¼€é”€
+B2 ? B1 â‰ˆ 77ms    â†’ clangd å¤„ç†,å  candidate-ready çš„ >99%
 ```
 
-### 21.3 ÅĞ¶¨:Á½Ìõ¶³½á¹æÔòÍ¬Ê±´¥·¢
-- **GO-Transport**:´«ÊäÕ¼±È ~0.01% ¡ú JSON/IPC ÕıÊ½ÅĞ¶¨Îª·ÇÆ¿¾±,**simd-json / shared-memory / ÌØÊâ IPC ±»±¾ÂÖÊı¾İÓÀ¾Ã·ñÖ¤**(³ı·Ç¸ºÔØĞÎ×´¸Ä±ä²¢¸½ĞÂÖ¤¾İ);
-- **GO-Backend**:clangd ´¦Àí >50% ¡ú ÏÂÒ»²½Êô backend/context ²ßÂÔÓë Completion UI ¹éÒò(EVS-4.4)¡£
+### 21.3 åˆ¤å®š:ä¸¤æ¡å†»ç»“è§„åˆ™åŒæ—¶è§¦å‘
+- **GO-Transport**:ä¼ è¾“å æ¯” ~0.01% â†’ JSON/IPC æ­£å¼åˆ¤å®šä¸ºéç“¶é¢ˆ,**simd-json / shared-memory / ç‰¹æ®Š IPC è¢«æœ¬è½®æ•°æ®æ°¸ä¹…å¦è¯**(é™¤éè´Ÿè½½å½¢çŠ¶æ”¹å˜å¹¶é™„æ–°è¯æ®);
+- **GO-Backend**:clangd å¤„ç† >50% â†’ ä¸‹ä¸€æ­¥å± backend/context ç­–ç•¥ä¸ Completion UI å½’å› (EVS-4.4)ã€‚
 
-Ô­Ê¼ÂÛµãµÄ³ÏÊµ½áÂÛ:**Dynamic Module ÏûÃğ Emacs?ENCA ±ß½ç JSON µÄÊÕÒæÊÇÕæÊµµÄ(¦Ìs ¼¶),µ«ÏÖ´ú IDE ÑÓ³Ù²î¾à²»ÔÚÕâ¸ö±ß½çÉÏ¡ª¡ªËüÔÚ backend Óë UI¡£**
+åŸå§‹è®ºç‚¹çš„è¯šå®ç»“è®º:**Dynamic Module æ¶ˆç­ Emacs?ENCA è¾¹ç•Œ JSON çš„æ”¶ç›Šæ˜¯çœŸå®çš„(Î¼s çº§),ä½†ç°ä»£ IDE å»¶è¿Ÿå·®è·ä¸åœ¨è¿™ä¸ªè¾¹ç•Œä¸Šâ€”â€”å®ƒåœ¨ backend ä¸ UIã€‚**
 
-### 21.4 ¹¤³Ì¼ÇÂ¼
-- ÊÖĞ´×îĞ¡ JSON-RPC codec(µİ¹éÏÂ½µ³ÉÔ±±éÀú,×Ö·û´®ÌÓÒİ¸ĞÖª);ĞŞ¸´Á½ÂÖÕæÊµÈ±Ïİ:(a) ·ÇÆ¥Åä±êÁ¿ÖµÎó°ó¶¨ `{"a":1,"id":42}`¡ú1;(b) Ö¡Ïû·Ñºó acc Î´ÖØÖÃµ¼ÖÂ¾ÉÖ¡ÖØ·Å;(c) loopback »ØÏÔĞèÅÅ¿Õ(discipline:Í¨ÖªÒ²±ØĞë¶Á»Ø×Ô¼ºµÄ»ØÏÔ);
-- Windows ¹ÜµÀµÈ´ı²ÉÓÃ¡¸×ÔĞı 2ms + Sleep(1) ¶µµ×¡¹»ìºÏ²ßÂÔ,B1 ¹éÒò±£³ÖÎ¢Ãë·Ö±æÂÊ;
-- È«Ì×¼ş **31978 checks / 0 failures**(storm-real ±äÌå 31995/0),ASan ¸É¾»¡£
+### 21.4 å·¥ç¨‹è®°å½•
+- æ‰‹å†™æœ€å° JSON-RPC codec(é€’å½’ä¸‹é™æˆå‘˜éå†,å­—ç¬¦ä¸²é€ƒé€¸æ„ŸçŸ¥);ä¿®å¤ä¸¤è½®çœŸå®ç¼ºé™·:(a) éåŒ¹é…æ ‡é‡å€¼è¯¯ç»‘å®š `{"a":1,"id":42}`â†’1;(b) å¸§æ¶ˆè´¹å acc æœªé‡ç½®å¯¼è‡´æ—§å¸§é‡æ”¾;(c) loopback å›æ˜¾éœ€æ’ç©º(discipline:é€šçŸ¥ä¹Ÿå¿…é¡»è¯»å›è‡ªå·±çš„å›æ˜¾);
+- Windows ç®¡é“ç­‰å¾…é‡‡ç”¨ã€Œè‡ªæ—‹ 2ms + Sleep(1) å…œåº•ã€æ··åˆç­–ç•¥,B1 å½’å› ä¿æŒå¾®ç§’åˆ†è¾¨ç‡;
+- å…¨å¥—ä»¶ **31978 checks / 0 failures**(storm-real å˜ä½“ 31995/0),ASan å¹²å‡€ã€‚
 
-### 21.5 ÏÂÒ»²½
-EVS-4.4:commit ¡ú candidate ×ª»» ¡ú completion-table ¡ú popup ¡ú redisplay ¡ú visible µÄÖğ¶Î¹éÒò¡£°´ ¡ì5 GO-UI ¹æÔò,Èô commit¡úvisible Ö÷µ¼Î²²¿ÑÓ³Ù,Ö÷Õ½³¡ÕıÊ½×ªÒÆµ½ Emacs UI/redisplay¡£
+### 21.5 ä¸‹ä¸€æ­¥
+EVS-4.4:commit â†’ candidate è½¬æ¢ â†’ completion-table â†’ popup â†’ redisplay â†’ visible çš„é€æ®µå½’å› ã€‚æŒ‰ Â§5 GO-UI è§„åˆ™,è‹¥ commitâ†’visible ä¸»å¯¼å°¾éƒ¨å»¶è¿Ÿ,ä¸»æˆ˜åœºæ­£å¼è½¬ç§»åˆ° Emacs UI/redisplayã€‚
 
 
 
-## 22. EVS-4.4 Closure ¡ª UI Critical Path Attribution(2026-08-24)
+## 22. EVS-4.4 Closure â€” UI Critical Path Attribution(2026-08-24)
 
-### 22.1 ÆõÔ¼(`bench/enca/evs4/UI_ATTRIBUTION.md`)
-T0¨CT12 Ê±¼äµã¡¢ËÄ±Û(A0 synthetic / A1 real / A2 worker-built model / A3 worker-built popup model)¡¢R ½×Ìİ(R0¨CR4)¡¢ÒÔ¼°**Ô¤¶³½áµÄ Render Snapshot ĞÎ×´**(worker ²ú²»¿É±ä¿ìÕÕ,Ö÷Ïß³Ì validate¡úswap¡údamage¡úredisplay)¡ª¡ª¹©Î´À´·ÖÖ§ B ´¥·¢Ê±Ö±½ÓÊ¹ÓÃ,±ÜÃâ¶ş´ÎÉè¼Æ±çÂÛ¡£
+### 22.1 å¥‘çº¦(`bench/enca/evs4/UI_ATTRIBUTION.md`)
+T0â€“T12 æ—¶é—´ç‚¹ã€å››è‡‚(A0 synthetic / A1 real / A2 worker-built model / A3 worker-built popup model)ã€R é˜¶æ¢¯(R0â€“R4)ã€ä»¥åŠ**é¢„å†»ç»“çš„ Render Snapshot å½¢çŠ¶**(worker äº§ä¸å¯å˜å¿«ç…§,ä¸»çº¿ç¨‹ validateâ†’swapâ†’damageâ†’redisplay)â€”â€”ä¾›æœªæ¥åˆ†æ”¯ B è§¦å‘æ—¶ç›´æ¥ä½¿ç”¨,é¿å…äºŒæ¬¡è®¾è®¡è¾©è®ºã€‚
 
-### 22.2 Completion transformation(T6¡úT7,ÕæÊµ Emacs Êı¾İ½á¹¹)
-| ºòÑ¡Êı | all-completions p50 |
+### 22.2 Completion transformation(T6â†’T7,çœŸå® Emacs æ•°æ®ç»“æ„)
+| å€™é€‰æ•° | all-completions p50 |
 |---|---|
-| 10 / 100 | 0.011¨C0.023ms |
-| 1K | 0.056¨C0.064ms |
-| 10K | 0.27¨C0.46ms |
-| **100K** | **6.4ms**(Î¨Ò»Ô½Ïß¸ñ) |
+| 10 / 100 | 0.011â€“0.023ms |
+| 1K | 0.056â€“0.064ms |
+| 10K | 0.27â€“0.46ms |
+| **100K** | **6.4ms**(å”¯ä¸€è¶Šçº¿æ ¼) |
 
-### 22.3 Redisplay ½×Ìİ(tty,Ç¿ÖÆÖØ»æ,º¬ÖÕ¶ËÊä³ö)
-| ¸ñ | p50 |
+### 22.3 Redisplay é˜¶æ¢¯(tty,å¼ºåˆ¶é‡ç»˜,å«ç»ˆç«¯è¾“å‡º)
+| æ ¼ | p50 |
 |---|---|
-| R0 ÎŞµ¯´°»ùÏß | 0.033ms |
-| R2 popup overlay(1/10/50 ĞĞ)| **1.57¨C2.04ms** |
+| R0 æ— å¼¹çª—åŸºçº¿ | 0.033ms |
+| R2 popup overlay(1/10/50 è¡Œ)| **1.57â€“2.04ms** |
 
-popup redisplay Ïà¶Ô»ùÏß ~60¡Á,µ«¾ø¶ÔÖµ½ö ~2ms¡£
+popup redisplay ç›¸å¯¹åŸºçº¿ ~60Ã—,ä½†ç»å¯¹å€¼ä»… ~2msã€‚
 
-### 22.4 ÅĞ¶¨
-- **·ÖÖ§ B(redisplay ÖØ¹¹)²»´¥·¢**:2ms ¾ø¶ÔÖµÔ¶µÍÓÚÈÎºÎÖØ¹¹Ö¤¾İÃÅ¼÷;EVS-5 Render Snapshot **ÎŞ¾İÆô¶¯,¹Ø±Õ**;
-- ·ÖÖ§ A ½öÔÚ²¡Ì¬ 100K ºòÑ¡±í³öÏÖ;
-- candidate-ready¡úvisible ¡Ö **~2ms(tty)**,GUI »á»°Ô¤¼Æ¸üµÍ;
-- keypress¡úvisible µÄÖ÷µ¼ÏîÈÔÊÇ **clangd ºó¶Ë 78¨C92ms**(¡ì21)¡ª¡ªENCA È«Á´Â·(capture+snapshot+scheduler+wakeup+transport)ºÏ¼Æ <0.1ms¡£
+### 22.4 åˆ¤å®š
+- **åˆ†æ”¯ B(redisplay é‡æ„)ä¸è§¦å‘**:2ms ç»å¯¹å€¼è¿œä½äºä»»ä½•é‡æ„è¯æ®é—¨æ§›;EVS-5 Render Snapshot **æ— æ®å¯åŠ¨,å…³é—­**;
+- åˆ†æ”¯ A ä»…åœ¨ç—…æ€ 100K å€™é€‰è¡¨å‡ºç°;
+- candidate-readyâ†’visible â‰ˆ **~2ms(tty)**,GUI ä¼šè¯é¢„è®¡æ›´ä½;
+- keypressâ†’visible çš„ä¸»å¯¼é¡¹ä»æ˜¯ **clangd åç«¯ 78â€“92ms**(Â§21)â€”â€”ENCA å…¨é“¾è·¯(capture+snapshot+scheduler+wakeup+transport)åˆè®¡ <0.1msã€‚
 
-### 22.5 ÏîÄ¿¼¶½áÂÛ(Ö¤¾İÁ´±ÕºÏ)
-ÏÖ´ú IDE ²î¾à²»ÔÚ Emacs ±ß½ç¡¢²»ÔÚ JSON/IPC¡¢²»ÔÚ snapshot/scheduler/runtime,¶øÔÚ (1) LSP backend ±¾ÉíÓë (2) ÕæÊµ completion UI µÄ¼¯³ÉÖÊÁ¿¡£ENCA ÒÑ°Ñ¡¸Emacs ×ÔÉí¿É¿ØµÄ²¿·Ö¡¹Ñ¹µ½Î¢Ãë~ÑÇºÁÃë¼¶²¢È«²¿¶³½á;ºóĞøÈÎºÎÓÅ»¯±ØĞëÏÈÔÚ keypress¡úvisible ÉÏÖ¸ÈÏÆäºÁÃë¼¶¹±Ï×,·ñÔò²»×ö¡£
-
-
-
-## 23. Project Re-scope ¡ª ENCA Performance Freeze Óë EVS-5(2026-08-24)
-
-ºËĞÄÑĞ¾¿±Õ»·Íê³É:keypress¡úvisible µÄÍêÕû·Ö½âÒÑ¾­¸ø³ö,**ENCA runtime <0.1ms¡¢completion UI ~2ms¡¢LSP backend 78¨C92ms(Ö÷µ¼)**¡£¾İ´Ë:
-
-- **ENCA Performance Freeze** ÉúĞ§(`src/enca/ARCHITECTURE.md` ¡ì26):P1/P2/P3/EVS-1..4 È«²¿ CLOSED,EVS-5 Render Snapshot NO-GO;¶àÏß³Ì UI¡¢redisplay ÖØ¹¹¡¢²¢ĞĞ GC¡¢allocator Ìæ»»¡¢NUMA¡¢work stealing¡¢shared-memory LSP¡¢SIMD JSON¡¢Rust »¯ core È«²¿³ö½ç;
-- **×î¸ß¹¤³ÌÕş²ß**:¡¸Ã»ÓĞºÁÃë¼¶ user-path attribution,¾ÍÃ»ÓĞ¼Ü¹¹¸Ä¶¯¡¹¡ª¡ªÒÔÉÏÃ¿Ò»Ïî¹Ø±Õ¶¼ÓÉ¸Ã¹æÔò²úÉú,ÖØ¿ªÈÎºÎÒ»ÏîĞèÒªĞÂÊµÑéÖ¸ÈÏËü½«Ïû³ıµÄ¾«È·ºÁÃë·İ¶î;
-- ÏîÄ¿ÕıÊ½¸üÃûÎª **ENCA Real Completion / Semantic Latency**,ÏÂÒ»½×¶ÎÎ¨Ò»Ä¿±ê:°Ñ 78¨C92ms µÄ backend Ö÷µ¼Ïî´òÏÂÀ´¡£ÈıÌõ¶³½áµÄÑĞ¾¿·½Ïò:**D1 Backend Context Engineering¡¢D2 Cancellation/Speculation¡¢D3 Completion Cache**;
-- EVS-5.0 ÆõÔ¼ÒÑ¶³½á(`bench/enca/evs5/EVS5.md`):C1¨CC10 ÊµÑé¾ØÕó(cold/warm/narrowing/storm/cursor/edit/cancel/hit/miss/large-project)¡¢»º´æÊı¾İÆõÔ¼(²»¿É±ä refcounted ÌõÄ¿ + ÇøÓòÊ§Ğ§)¡¢½×¶ÎÃÅ½û 5.0¡ú5.5¡£°´Ö¸Ê¾,±¾½×¶Î²»Ğ´´úÂë¡£
+### 22.5 é¡¹ç›®çº§ç»“è®º(è¯æ®é“¾é—­åˆ)
+ç°ä»£ IDE å·®è·ä¸åœ¨ Emacs è¾¹ç•Œã€ä¸åœ¨ JSON/IPCã€ä¸åœ¨ snapshot/scheduler/runtime,è€Œåœ¨ (1) LSP backend æœ¬èº«ä¸ (2) çœŸå® completion UI çš„é›†æˆè´¨é‡ã€‚ENCA å·²æŠŠã€ŒEmacs è‡ªèº«å¯æ§çš„éƒ¨åˆ†ã€å‹åˆ°å¾®ç§’~äºšæ¯«ç§’çº§å¹¶å…¨éƒ¨å†»ç»“;åç»­ä»»ä½•ä¼˜åŒ–å¿…é¡»å…ˆåœ¨ keypressâ†’visible ä¸ŠæŒ‡è®¤å…¶æ¯«ç§’çº§è´¡çŒ®,å¦åˆ™ä¸åšã€‚
 
 
 
-## 24. P0 Baseline Closure ¡ª Vanilla / ENCA-disabled / ENCA-enabled(2026-08-24)
+## 23. Project Re-scope â€” ENCA Performance Freeze ä¸ EVS-5(2026-08-24)
 
-### 24.1 ÈıÂ·¹¹½¨(Í¬Ò» upstream »ùµã `11a1cb7445d`,Í¬ configure¡¢Í¬ CFLAGS=-O2)
+æ ¸å¿ƒç ”ç©¶é—­ç¯å®Œæˆ:keypressâ†’visible çš„å®Œæ•´åˆ†è§£å·²ç»ç»™å‡º,**ENCA runtime <0.1msã€completion UI ~2msã€LSP backend 78â€“92ms(ä¸»å¯¼)**ã€‚æ®æ­¤:
 
-| ¹¹½¨ | ÄÚÈİ | ÑéÖ¤ |
+- **ENCA Performance Freeze** ç”Ÿæ•ˆ(`src/enca/ARCHITECTURE.md` Â§26):P1/P2/P3/EVS-1..4 å…¨éƒ¨ CLOSED,EVS-5 Render Snapshot NO-GO;å¤šçº¿ç¨‹ UIã€redisplay é‡æ„ã€å¹¶è¡Œ GCã€allocator æ›¿æ¢ã€NUMAã€work stealingã€shared-memory LSPã€SIMD JSONã€Rust åŒ– core å…¨éƒ¨å‡ºç•Œ;
+- **æœ€é«˜å·¥ç¨‹æ”¿ç­–**:ã€Œæ²¡æœ‰æ¯«ç§’çº§ user-path attribution,å°±æ²¡æœ‰æ¶æ„æ”¹åŠ¨ã€â€”â€”ä»¥ä¸Šæ¯ä¸€é¡¹å…³é—­éƒ½ç”±è¯¥è§„åˆ™äº§ç”Ÿ,é‡å¼€ä»»ä½•ä¸€é¡¹éœ€è¦æ–°å®éªŒæŒ‡è®¤å®ƒå°†æ¶ˆé™¤çš„ç²¾ç¡®æ¯«ç§’ä»½é¢;
+- é¡¹ç›®æ­£å¼æ›´åä¸º **ENCA Real Completion / Semantic Latency**,ä¸‹ä¸€é˜¶æ®µå”¯ä¸€ç›®æ ‡:æŠŠ 78â€“92ms çš„ backend ä¸»å¯¼é¡¹æ‰“ä¸‹æ¥ã€‚ä¸‰æ¡å†»ç»“çš„ç ”ç©¶æ–¹å‘:**D1 Backend Context Engineeringã€D2 Cancellation/Speculationã€D3 Completion Cache**;
+- EVS-5.0 å¥‘çº¦å·²å†»ç»“(`bench/enca/evs5/EVS5.md`):C1â€“C10 å®éªŒçŸ©é˜µ(cold/warm/narrowing/storm/cursor/edit/cancel/hit/miss/large-project)ã€ç¼“å­˜æ•°æ®å¥‘çº¦(ä¸å¯å˜ refcounted æ¡ç›® + åŒºåŸŸå¤±æ•ˆ)ã€é˜¶æ®µé—¨ç¦ 5.0â†’5.5ã€‚æŒ‰æŒ‡ç¤º,æœ¬é˜¶æ®µä¸å†™ä»£ç ã€‚
+
+
+
+## 24. P0 Baseline Closure â€” Vanilla / ENCA-disabled / ENCA-enabled(2026-08-24)
+
+### 24.1 ä¸‰è·¯æ„å»º(åŒä¸€ upstream åŸºç‚¹ `11a1cb7445d`,åŒ configureã€åŒ CFLAGS=-O2)
+
+| æ„å»º | å†…å®¹ | éªŒè¯ |
 |---|---|---|
-| A vanilla | upstream Ô´Âëµ¼³ö,Áã ENCA ÄÚÈİ | config.h ÎŞ HAVE_ENCA |
-| B disabled | fork È«²¿Ô´Âë,`configure`(Ä¬ÈÏ¹Ø)| **ENCA_OBJ Îª¿Õ**;emacs Óë A ×Ö½Ú´óĞ¡Ò»ÖÂ(2992936)|
-| C enabled | fork È«²¿Ô´Âë,`--enable-enca` | ENCA_OBJ º¬È«²¿ enca ¶ÔÏó |
+| A vanilla | upstream æºç å¯¼å‡º,é›¶ ENCA å†…å®¹ | config.h æ—  HAVE_ENCA |
+| B disabled | fork å…¨éƒ¨æºç ,`configure`(é»˜è®¤å…³)| **ENCA_OBJ ä¸ºç©º**;emacs ä¸ A å­—èŠ‚å¤§å°ä¸€è‡´(2992936)|
+| C enabled | fork å…¨éƒ¨æºç ,`--enable-enca` | ENCA_OBJ å«å…¨éƒ¨ enca å¯¹è±¡ |
 
-### 24.2 Batch Ì×¼ş(ÖĞÎ»Êı ms,¡Á3 ÂÖ ¡Á7 reps)
+### 24.2 Batch å¥—ä»¶(ä¸­ä½æ•° ms,Ã—3 è½® Ã—7 reps)
 | cell | A | B | C | B/A | C/B |
 |---|---|---|---|---|---|
 | buffer-insert-1MB | 10.17 | 10.50 | 10.69 | 1.03 | 1.02 |
@@ -766,72 +766,72 @@ popup redisplay Ïà¶Ô»ùÏß ~60¡Á,µ«¾ø¶ÔÖµ½ö ~2ms¡£
 | sort-10k | 6.26 | 5.57 | 5.63 | 0.89 | 1.01 |
 | string-concat-500 | 9.73 | 9.05 | 9.37 | 0.93 | 1.04 |
 
-### 24.3 tty Redisplay Ì×¼ş(pty Ç¿ÖÆÖØ»æ,¡Á3 ÂÖ ¡Á10 reps)
+### 24.3 tty Redisplay å¥—ä»¶(pty å¼ºåˆ¶é‡ç»˜,Ã—3 è½® Ã—10 reps)
 | cell | A | B | C | B/A | C/B |
 |---|---|---|---|---|---|
 | R0-noop | 0.090 | 0.084 | 0.077 | 0.94 | 0.91 |
 | R1-text-edit | 1.81 | 1.77 | 1.86 | 0.97 | 1.05 |
 | R2-popup-10 | 1.75 | 1.60 | 1.74 | 0.92 | 1.09 |
 
-### 24.4 ÅĞ¶¨
-È«²¿±ÈÖµÂäÔÚ **¡À10% ²âÁ¿ÔëÉù´ø**(ÎŞÈÎºÎ·½ÏòĞÔÆ«ÒÆ):
+### 24.4 åˆ¤å®š
+å…¨éƒ¨æ¯”å€¼è½åœ¨ **Â±10% æµ‹é‡å™ªå£°å¸¦**(æ— ä»»ä½•æ–¹å‘æ€§åç§»):
 
 ```text
-A ¡Ö B  ¡ú  ENCA patch ¶Ô Emacs baseline ÎŞ¿É²âÇÖÈë³É±¾
-       (disabled ¹¹½¨Óë vanilla ×Ö½Ú¼¶Í¬³ß´ç¡¢ĞĞÎªÍ¬¼¶)
-B ¡Ö C  ¡ú  ENCA runtime ÆôÓÃ²»²úÉúÏµÍ³ĞÔ»Ø¹é
-A ¡Ö C  ¡ú  ÓÃ»§¿É¼ûÂ·¾¶ÕûÌåÎŞ»Ø¹é
+A â‰ˆ B  â†’  ENCA patch å¯¹ Emacs baseline æ— å¯æµ‹ä¾µå…¥æˆæœ¬
+       (disabled æ„å»ºä¸ vanilla å­—èŠ‚çº§åŒå°ºå¯¸ã€è¡Œä¸ºåŒçº§)
+B â‰ˆ C  â†’  ENCA runtime å¯ç”¨ä¸äº§ç”Ÿç³»ç»Ÿæ€§å›å½’
+A â‰ˆ C  â†’  ç”¨æˆ·å¯è§è·¯å¾„æ•´ä½“æ— å›å½’
 ```
 
-**ENCA ÕıÊ½´ÓĞÔÄÜÏÓÒÉÃûµ¥ÅÅ³ı¡£** ½áºÏ ¡ì18¨C¡ì22:completion Â·¾¶µÄÑÓ³ÙÖ÷µ¼ÏîÊÇÍâ²¿ LSP backend(~80ms),¶ø·Ç Emacs ºËĞÄ¡¢Òà·Ç ENCA¡£EVS-5(Real Completion / Semantic Latency)Òò´Ë¾Û½¹ backend/context/cache ·½ÏòµÄ¾ö²ß»ñµÃ×îÖÕÒÀ¾İ¡£
+**ENCA æ­£å¼ä»æ€§èƒ½å«Œç–‘åå•æ’é™¤ã€‚** ç»“åˆ Â§18â€“Â§22:completion è·¯å¾„çš„å»¶è¿Ÿä¸»å¯¼é¡¹æ˜¯å¤–éƒ¨ LSP backend(~80ms),è€Œé Emacs æ ¸å¿ƒã€äº¦é ENCAã€‚EVS-5(Real Completion / Semantic Latency)å› æ­¤èšç„¦ backend/context/cache æ–¹å‘çš„å†³ç­–è·å¾—æœ€ç»ˆä¾æ®ã€‚
 
-### 24.5 ¸½´øĞŞ¸´
-`src/enca/lsp/transport.c` POSIX ·ÖÖ§´æÔÚ×ÖÃæ `\n` ÎÛÈ¾(´ËÇ° PowerShell Ìæ»»ÊÂ¹Ê,Windows ¹¹½¨²»¿É¼û)¡ª¡ª±¾ÂÖ WSL ¹¹½¨±©Â¶²¢ĞŞ¸´¡£
+### 24.5 é™„å¸¦ä¿®å¤
+`src/enca/lsp/transport.c` POSIX åˆ†æ”¯å­˜åœ¨å­—é¢ `\n` æ±¡æŸ“(æ­¤å‰ PowerShell æ›¿æ¢äº‹æ•…,Windows æ„å»ºä¸å¯è§)â€”â€”æœ¬è½® WSL æ„å»ºæš´éœ²å¹¶ä¿®å¤ã€‚
 
 
 
-## 25. EVS-5.2.6 Closure ¡ª Cache ½ÓÈëÕæÊµ UI:keypress¡úvisible ·ÖÁÑ(2026-08-24)
+## 25. EVS-5.2.6 Closure â€” Cache æ¥å…¥çœŸå® UI:keypressâ†’visible åˆ†è£‚(2026-08-24)
 
-### 25.1 ¼¯³É
-`enca-evs-complete PREFIX CURSOR` ÔÚÕæÊµ tty Emacs ÖĞ×ßÍêÕûÓÃ»§Â·¾¶:capture/snapshot ¡ú scheduler(INTERACTIVE)¡ú worker(cache lookup ¡ú miss Ê± LSP Íù·µ)¡ú wakeup ¡ú ºòÑ¡ ¡ú popup overlay °²×° ¡ú Ç¿ÖÆ redisplay¡£MISS ±Ûºó¶Ë³É±¾ÒÔ 90ms loopback ×¢ÈëÄ£Äâ(clangd Êµ²â 78¨C92ms,EVS-4.3);´«ÊäÓë½âÎöÎªÕæÊµ´úÂë¡£
+### 25.1 é›†æˆ
+`enca-evs-complete PREFIX CURSOR` åœ¨çœŸå® tty Emacs ä¸­èµ°å®Œæ•´ç”¨æˆ·è·¯å¾„:capture/snapshot â†’ scheduler(INTERACTIVE)â†’ worker(cache lookup â†’ miss æ—¶ LSP å¾€è¿”)â†’ wakeup â†’ å€™é€‰ â†’ popup overlay å®‰è£… â†’ å¼ºåˆ¶ redisplayã€‚MISS è‡‚åç«¯æˆæœ¬ä»¥ 90ms loopback æ³¨å…¥æ¨¡æ‹Ÿ(clangd å®æµ‹ 78â€“92ms,EVS-4.3);ä¼ è¾“ä¸è§£æä¸ºçœŸå®ä»£ç ã€‚
 
-### 25.2 keypress¡úvisible(tty,Ã¿ op º¬ popup+redisplay)
-| ±Û | ops | hit% | **p50** | max |
+### 25.2 keypressâ†’visible(tty,æ¯ op å« popup+redisplay)
+| è‡‚ | ops | hit% | **p50** | max |
 |---|---|---|---|---|
-| HIT(ÖØ¸´Ç°×º)| 20 | 100% | **0.58ms** | 2.0ms |
-| MISS(+90ms ºó¶Ë)| 12 | 0% | 90.4ms | 90.6ms |
-| MIX(½»Ìæ)| 16 | 50% | 90.3ms | 90.5ms |
+| HIT(é‡å¤å‰ç¼€)| 20 | 100% | **0.58ms** | 2.0ms |
+| MISS(+90ms åç«¯)| 12 | 0% | 90.4ms | 90.6ms |
+| MIX(äº¤æ›¿)| 16 | 50% | 90.3ms | 90.5ms |
 
-engine ÄÚ²¿(hit Â·¾¶)¡Ö0.001ms;UI ¶Î(popup+redisplay)¡Ö0.3¨C0.6ms¡ª¡ªÓë EVS-4.4 µÄ ~2ms tty µØ°åÍ¬Á¿¼¶ÇÒ¸üµÍ(µ¥ĞĞ popup)¡£
+engine å†…éƒ¨(hit è·¯å¾„)â‰ˆ0.001ms;UI æ®µ(popup+redisplay)â‰ˆ0.3â€“0.6msâ€”â€”ä¸ EVS-4.4 çš„ ~2ms tty åœ°æ¿åŒé‡çº§ä¸”æ›´ä½(å•è¡Œ popup)ã€‚
 
-### 25.3 ÅĞ¶¨
-**C8c/C12 ´ï³É**:hit ¹¤×÷¸ºÔØÏÂ keypress¡úvisible <1ms;C11 ½á¹¹ĞÔ³ÉÁ¢(hit Â·¾¶Áãºó¶Ë½Ó´¥)¡£ÏîÄ¿µÚÒ»´Î³öÏÖ**Á½¸öÊıÁ¿¼¶µÄÓÃ»§¿É¸ĞÖªÊÕÒæ**(90ms ¡ú 0.58ms)¡£
+### 25.3 åˆ¤å®š
+**C8c/C12 è¾¾æˆ**:hit å·¥ä½œè´Ÿè½½ä¸‹ keypressâ†’visible <1ms;C11 ç»“æ„æ€§æˆç«‹(hit è·¯å¾„é›¶åç«¯æ¥è§¦)ã€‚é¡¹ç›®ç¬¬ä¸€æ¬¡å‡ºç°**ä¸¤ä¸ªæ•°é‡çº§çš„ç”¨æˆ·å¯æ„ŸçŸ¥æ”¶ç›Š**(90ms â†’ 0.58ms)ã€‚
 
-³ÏÊµ±ß½ç:novel-prefix miss ÈÔÊÇ backend-bound(~90ms)¡ª¡ªÕâÕıÊÇÏÖ´ú IDE µÄĞÎÌ¬(ÃüÖĞ¼´Ê±¡¢Î´ÃüÖĞµÈ´ı·şÎñÆ÷)¡£ÃüÖĞÂÊÌáÉıÊô EVS-5.2 Stage D(cross-revision reuse,Ğè¶ÀÁ¢ÆõÔ¼)ÓëÕæÊµ´ò×ÖÁ÷ÑĞ¾¿¡£
+è¯šå®è¾¹ç•Œ:novel-prefix miss ä»æ˜¯ backend-bound(~90ms)â€”â€”è¿™æ­£æ˜¯ç°ä»£ IDE çš„å½¢æ€(å‘½ä¸­å³æ—¶ã€æœªå‘½ä¸­ç­‰å¾…æœåŠ¡å™¨)ã€‚å‘½ä¸­ç‡æå‡å± EVS-5.2 Stage D(cross-revision reuse,éœ€ç‹¬ç«‹å¥‘çº¦)ä¸çœŸå®æ‰“å­—æµç ”ç©¶ã€‚
 
-### 25.4 ¹ı³ÌĞŞ¸´
-- didChange JSON È±±ÕÀ¨ºÅ(EVS-4.3 storm-real Êı¾İÒò´Ë»ùÓÚ³Â¾ÉÎÄµµ,ÒÑ×¢Ã÷);
-- collect/round_trip ÏÖÌø¹ı publishDiagnostics Í¨ÖªÖ¡;
-- spawn Ö§³Ö¶îÍâ argv(exec_argv),fake server ¸Ä±ê×¼ LSP ÖğÍ·¶ÁÈ¡(Ô­ bulk read ¶ÔĞ¡Ö¡ËÀËø);
-- Ò»¸ö getenv-vs-emacs-environ ½»»¥¶Î´íÎó(Ô­ĞÍÆÚÓ²±àÂëÄ¬ÈÏÖµÈÆ¿ª,gdb ¶¨Î»)¡£
+### 25.4 è¿‡ç¨‹ä¿®å¤
+- didChange JSON ç¼ºé—­æ‹¬å·(EVS-4.3 storm-real æ•°æ®å› æ­¤åŸºäºé™ˆæ—§æ–‡æ¡£,å·²æ³¨æ˜);
+- collect/round_trip ç°è·³è¿‡ publishDiagnostics é€šçŸ¥å¸§;
+- spawn æ”¯æŒé¢å¤– argv(exec_argv),fake server æ”¹æ ‡å‡† LSP é€å¤´è¯»å–(åŸ bulk read å¯¹å°å¸§æ­»é”);
+- ä¸€ä¸ª getenv-vs-emacs-environ äº¤äº’æ®µé”™è¯¯(åŸå‹æœŸç¡¬ç¼–ç é»˜è®¤å€¼ç»•å¼€,gdb å®šä½)ã€‚
 
 
 
-## 26. EVS-5.3 Closure ¡ª Real Typing Workload(F1,2026-08-24)
+## 26. EVS-5.3 Closure â€” Real Typing Workload(F1,2026-08-24)
 
-### 26.1 ¹¤×÷¸ºÔØ(tty Emacs + loopback ºó¶Ë,miss ×¢Èë 90ms Ë¼¿¼Ê±¼ä)
-| ³¡¾° | ops | exact | extend | miss | backend avoided | p50 |
+### 26.1 å·¥ä½œè´Ÿè½½(tty Emacs + loopback åç«¯,miss æ³¨å…¥ 90ms æ€è€ƒæ—¶é—´)
+| åœºæ™¯ | ops | exact | extend | miss | backend avoided | p50 |
 |---|---|---|---|---|---|---|
-| identifier-growth(Öğ×Ö·û´ò´Ê)| 32 | 9 | 2 | 21 | **34.4%** | 90.3ms(miss Ö÷µ¼)|
-| retry(Í¬ÇëÇóÖØÊÔ)| 10 | 10 | 0 | 0 | **100%** | **0.074ms** |
-| edit-interleaved(±à¼­½»´í)| 12 | 0 | 0 | 12 | 0% | 90.4ms |
+| identifier-growth(é€å­—ç¬¦æ‰“è¯)| 32 | 9 | 2 | 21 | **34.4%** | 90.3ms(miss ä¸»å¯¼)|
+| retry(åŒè¯·æ±‚é‡è¯•)| 10 | 10 | 0 | 0 | **100%** | **0.074ms** |
+| edit-interleaved(ç¼–è¾‘äº¤é”™)| 12 | 0 | 0 | 12 | 0% | 90.4ms |
 
-Stage-B(Í¬ revision ÄÚ prefix Ôö³¤¸´ÓÃ)ÂäµØºó,Ôö³¤Àà¿ªÊ¼²úÉú extend ÃüÖĞ;±£ÊØÊ§Ğ§²ßÂÔÏÂ±à¼­½»´íÀà°´Éè¼ÆÈ«²¿ miss¡ª¡ª**ÁãÎóÃüÖĞ±£³Ö**¡£
+Stage-B(åŒ revision å†… prefix å¢é•¿å¤ç”¨)è½åœ°å,å¢é•¿ç±»å¼€å§‹äº§ç”Ÿ extend å‘½ä¸­;ä¿å®ˆå¤±æ•ˆç­–ç•¥ä¸‹ç¼–è¾‘äº¤é”™ç±»æŒ‰è®¾è®¡å…¨éƒ¨ missâ€”â€”**é›¶è¯¯å‘½ä¸­ä¿æŒ**ã€‚
 
-### 26.2 F2 ÃÅ½ûÆÀ¹À(¡ì9.5)
-identifier+retry ÀàÒÑ½øÈëÑÇºÁÃë;Ê£Óà backend-bound ¼¯ÖĞÔÚ**±à¼­ºóÁ¢¼´²¹È«**µÄÁ÷³Ì¡£cross-revision reuse µÄ¿ÉÖ¤Ã÷ÊÕÒæÄ¿±ê = °Ñ edit-interleaved µÄ 0% ÌáÉıµ½ >50% ÇÒ false_hit=0¡£¸ÃÄ¿±êÃ÷È·µ«ÊµÏÖ·çÏÕ¸ß(ĞèÒª unrelatedness proof rule)¡ª¡ª**F2 Î¬³Ö¹Ø±Õ**,µÈ´ıÕæÊµÓÃ»§Êı¾İÏÔÊ¾¸Ã³¡¾°Õ¼±È×ãÒÔÖ¤Ã÷Æä¸´ÔÓ¶È¡£
+### 26.2 F2 é—¨ç¦è¯„ä¼°(Â§9.5)
+identifier+retry ç±»å·²è¿›å…¥äºšæ¯«ç§’;å‰©ä½™ backend-bound é›†ä¸­åœ¨**ç¼–è¾‘åç«‹å³è¡¥å…¨**çš„æµç¨‹ã€‚cross-revision reuse çš„å¯è¯æ˜æ”¶ç›Šç›®æ ‡ = æŠŠ edit-interleaved çš„ 0% æå‡åˆ° >50% ä¸” false_hit=0ã€‚è¯¥ç›®æ ‡æ˜ç¡®ä½†å®ç°é£é™©é«˜(éœ€è¦ unrelatedness proof rule)â€”â€”**F2 ç»´æŒå…³é—­**,ç­‰å¾…çœŸå®ç”¨æˆ·æ•°æ®æ˜¾ç¤ºè¯¥åœºæ™¯å æ¯”è¶³ä»¥è¯æ˜å…¶å¤æ‚åº¦ã€‚
 
-### 26.3 ÏîÄ¿×îÖÕ×´Ì¬(F1 ºó)
+### 26.3 é¡¹ç›®æœ€ç»ˆçŠ¶æ€(F1 å)
 ```text
 ENCA core (P1-P3 + wakeup + transport)   <0.1ms      FROZEN
 completion cache (strict rev + growth)   hit<1ms     Stage C GO
@@ -839,4 +839,4 @@ real typing hit rate                     34%-100%    MEASURED
 edit-interleaved                         0%(by design)
 false hits                               0           HARD GATE
 ```
-ÏîÄ¿´Ó"¼Ü¹¹ÓÅ»¯"ÍêÕû×ªĞÍÎª"ÓïÒåÑÓ³ÙÊµÑéÆ½Ì¨":Ã¿Ò»²ãµÄ³É±¾¡¢Ã¿Ò»¸ö¸Ü¸ËµÄÓĞĞ§ĞÔ¡¢Ã¿Ò»Ìõ±ß½ç,¶¼ÓĞ¿É¸´ÏÖÊµÑéÓëÔ­Ê¼Êı¾İÖ§³Å¡£
+é¡¹ç›®ä»"æ¶æ„ä¼˜åŒ–"å®Œæ•´è½¬å‹ä¸º"è¯­ä¹‰å»¶è¿Ÿå®éªŒå¹³å°":æ¯ä¸€å±‚çš„æˆæœ¬ã€æ¯ä¸€ä¸ªæ æ†çš„æœ‰æ•ˆæ€§ã€æ¯ä¸€æ¡è¾¹ç•Œ,éƒ½æœ‰å¯å¤ç°å®éªŒä¸åŸå§‹æ•°æ®æ”¯æ’‘ã€‚

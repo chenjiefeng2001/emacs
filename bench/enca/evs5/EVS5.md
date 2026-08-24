@@ -171,7 +171,7 @@ Every variant lands in the same 77-92ms band: **the backend has ZERO
 completion-cache locality** -- each request pays the full AST/index
 pipeline regardless of history.
 
-### Decision tree resolution (contract section 2 / EVS43 ¡ì5)
+### Decision tree resolution (contract section 2 / EVS43 Â§5)
 
 ```
 A context-sensitive?        NO   -> D1 closed
