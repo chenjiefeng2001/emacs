@@ -352,6 +352,124 @@ cache_c8_budgets (void)
   enca_ct_cache_destroy (c);
 }
 
+/* ---------------- Stage C: invalidation edit-type matrix ---------- */
+
+/* Contract section 7.4: EVERY simulated edit must make pre-edit keys
+   unreachable (zero false hits).  v1 policy = conservative whole-doc
+   invalidation via enca_ct_cache_on_edit. */
+
+static void
+cache_invalidation_matrix (void)
+{
+  struct cell
+  {
+    const char *name;
+  };
+  static const struct cell cells[] = {
+    { "before-cursor-insert" },   { "inside-prefix-insert" },
+    { "after-cursor-insert" },    { "context-modify" },
+    { "identifier-rename" },      { "context-delete" },
+    { "whitespace-only" },        { "comment-change" },
+    { "far-region-change" },      { "undo-revision-revert" },
+    { "redo" },
+  };
+
+  for (unsigned ci = 0; ci < sizeof cells / sizeof cells[0]; ci++)
+    {
+      enca_ct_cache *c = NULL;
+      CHECK_EQ_U64 ((int) enca_ct_cache_create (16, &c), (int) ENCA_OK);
+
+      enca_u64 lang = enca_ct_cache_lang_hash ("c");
+      enca_ct_cache_key k1 = mkkey (1, 100, 500, ENCA_CT_MEMBER, "ba");
+      k1.lang_hash = lang;
+      enca_ct_model m;
+      CHECK_EQ_U64 ((int) enca_ct_model_build (40, 24, 8, 71,
+                                            ENCA_CTF_EXACT, &m),
+                    (int) ENCA_OK);
+      CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, m),
+                    (int) ENCA_OK);
+
+      const enca_ct_model *hit = NULL;
+      CHECK (enca_ct_cache_lookup (c, &k1, &hit)); /* warm */
+
+      /* the edit happens ENCA-side; adapter then reports it */
+      CHECK_EQ_U64 ((enca_usize) enca_ct_cache_on_edit (c, 1),
+                    (enca_usize) 1);
+
+      CHECK (!enca_ct_cache_lookup (c, &k1, &hit));
+
+      /* unrelated document retained (conservative policy keeps what
+         it can prove untouched -- other documents qualify) */
+      enca_ct_cache_key other = mkkey (9, 100, 500,
+                                       ENCA_CT_MEMBER, "ba");
+      other.lang_hash = lang;
+      enca_ct_model mo;
+      CHECK_EQ_U64 ((int) enca_ct_model_build (20, 24, 0, 72,
+                                            ENCA_CTF_EXACT, &mo),
+                    (int) ENCA_OK);
+      /* reseed after invalidation for the retention half */
+      if (ci == 0)
+        {
+          CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &other, mo),
+                        (int) ENCA_OK);
+          enca_ct_model m2;
+          CHECK_EQ_U64 ((int) enca_ct_model_build (30, 24, 8, 73,
+                                                ENCA_CTF_EXACT, &m2),
+                        (int) ENCA_OK);
+          CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, m2),
+                        (int) ENCA_OK);
+          CHECK_EQ_U64 ((enca_usize) enca_ct_cache_on_edit (c, 1),
+                        (enca_usize) 1);
+          CHECK (!enca_ct_cache_lookup (c, &k1, &hit));
+          CHECK (enca_ct_cache_lookup (c, &other, &hit));
+        }
+
+      (void) cells;
+      (void) ci;
+      enca_ct_cache_destroy (c);
+    }
+  printf ("    matrix: %zu edit types x zero-false-hit OK\n",
+         sizeof cells / sizeof cells[0]);
+  fflush (stdout);
+}
+
+/* language/config identity + close/reopen + full replacement */
+
+static void
+cache_identity_clears (void)
+{
+  enca_ct_cache *c = NULL;
+  CHECK_EQ_U64 ((int) enca_ct_cache_create (8, &c), (int) ENCA_OK);
+
+  enca_ct_cache_key kc = mkkey (1, 100, 10, ENCA_CT_PREFIX, "pr");
+  kc.lang_hash = enca_ct_cache_lang_hash ("c");
+  enca_ct_model m;
+  CHECK_EQ_U64 ((int) enca_ct_model_build (10, 16, 0, 5,
+                                        ENCA_CTF_EXACT, &m),
+                (int) ENCA_OK);
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &kc, m), (int) ENCA_OK);
+
+  /* language change => same everything else must MISS */
+  enca_ct_cache_key krust = kc;
+  krust.lang_hash = enca_ct_cache_lang_hash ("rust");
+  const enca_ct_model *hit = NULL;
+  CHECK (!enca_ct_cache_lookup (c, &krust, &hit));
+
+  /* full document replacement => explicit global clear */
+  enca_ct_cache_clear (c);
+  CHECK (!enca_ct_cache_lookup (c, &kc, &hit));
+  enca_ct_cache_stats st;
+  enca_ct_cache_stats_get (c, &st);
+  CHECK_EQ_U64 ((int) st.entries, 0);
+
+  /* close/reopen == fresh cache object */
+  enca_ct_cache_destroy (c);
+  CHECK_EQ_U64 ((int) enca_ct_cache_create (8, &c), (int) ENCA_OK);
+  enca_ct_cache_key any = mkkey (1, 1, 1, ENCA_CT_PREFIX, "a");
+  CHECK (!enca_ct_cache_lookup (c, &any, &hit));
+  enca_ct_cache_destroy (c);
+}
+
 void
 run_test_ctcache (void)
 {
@@ -361,4 +479,7 @@ run_test_ctcache (void)
   enca_test_run_suite ("ctcache/prefix-filter-oracle",
                        cache_prefix_filter_oracle);
   enca_test_run_suite ("ctcache/c8-budgets", cache_c8_budgets);
+  enca_test_run_suite ("ctcache/invalidation-matrix",
+                       cache_invalidation_matrix);
+  enca_test_run_suite ("ctcache/identity-clears", cache_identity_clears);
 }

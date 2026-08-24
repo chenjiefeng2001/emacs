@@ -7,6 +7,9 @@
 #include "test_util.h"
 
 #include "../../src/enca/lsp/lsp.h"
+#include "../../src/enca/completion/cache.h"
+#include "../../src/enca/lsp/jsonrpc.h"
+#include "../../src/enca/memory/memory.h"
 #include "../../src/enca/time/time.h"
 
 #include <stdio.h>
@@ -375,6 +378,263 @@ evs53_cache_locality (void)
   enca_lsp_session_destroy (s);
 }
 
+/* ---------------- EVS-5.2 Stage C: dual-path oracle ---------------- */
+
+/* Per contract CACHE.md 7.5: after each edit the strict-key lookup
+   MUST miss; the FRESH backend labels define truth; installing them
+   and re-looking-up must reproduce exactly that label set.  Any
+   deviation counts as a false hit and fails the stage. */
+
+static void
+evs54_dual_path_oracle (void)
+{
+  const char *path = e5_clangd_or_skip ();
+  if (!path)
+    return;
+
+  enca_lsp_session *s = NULL;
+  enca_lsp_session_opts opts;
+  memset (&opts, 0, sizeof opts);
+  opts.clangd_path = path;
+  CHECK_EQ_U64 ((int) enca_lsp_session_create (ENCA_LSP_CLANGD, &opts,
+                                            &s),
+                (int) ENCA_OK);
+  enca_lsp_set_collect_timeout (s, 15000);
+
+  enca_ct_cache *cache = NULL;
+  CHECK_EQ_U64 ((int) enca_ct_cache_create (16, &cache), (int) ENCA_OK);
+
+  static const char *cases[] = {
+    "before-insert", "inside-prefix", "after-insert", "context-modify",
+    "identifier-rename", "context-delete", "whitespace-only"
+  };
+  long false_hits = 0;
+  long legit_hits = 0;
+  enca_u64 version = 0;
+
+  for (unsigned cs = 0; cs < sizeof cases / sizeof cases[0]; cs++)
+    {
+      size_t blen = 0;
+      char *body = e5_body (4096, &blen);
+
+      /* per-case mutation => every case is a distinct document */
+      for (size_t i = 0; i < blen; i++)
+        body[i] = (char) ('a' + ((i * (cs + 7)) % 26));
+      memcpy (body + blen - 4, "foo.", 4);
+
+      version++;
+      enca_result r = (cs == 0)
+        ? enca_lsp_did_open (s, "file:///oracle.c", body, blen, version)
+        : enca_lsp_did_change_full (s, "file:///oracle.c", body, blen,
+                                    version);
+      CHECK_EQ_U64 ((int) r, (int) ENCA_OK);
+      e5_msleep (120);
+
+      /* FRESH authoritative labels from the backend */
+      const char *resp = NULL;
+      size_t rl = 0;
+      r = enca_lsp_completion (s, "file:///oracle.c", 0, blen, &resp,
+                               &rl, NULL);
+      CHECK_EQ_U64 ((int) r, (int) ENCA_OK);
+      static const char *fl[512];
+      static size_t fll[512];
+      enca_usize nf = enca_json_collect_item_labels (resp, rl, fl, fll,
+                                                  512);
+
+      /* strict key for THIS revision must MISS first */
+      enca_ct_cache_key key;
+      memset (&key, 0, sizeof key);
+      key.document_id = 42;
+      key.revision = version;
+      key.cursor = blen;
+      key.trigger = ENCA_CT_MEMBER;
+      key.prefix_hash = enca_ct_cache_prefix_hash ("", 0);
+      key.lang_hash = enca_ct_cache_lang_hash ("c");
+
+      const enca_ct_model *hitm = NULL;
+      if (enca_ct_cache_lookup (cache, &key, &hitm))
+        false_hits++;           /* post-edit hit == stale serve */
+
+      /* install fresh labels as immutable entry */
+      enca_ct_model m;
+      m.count = nf > 256 ? 256 : nf;
+      m.bytes = 0;
+      m.items = enca_malloc (m.count * sizeof (enca_ct_candidate));
+      for (size_t i = 0; i < m.count; i++)
+        {
+          m.items[i].label_len = fll[i];
+          m.items[i].label = enca_malloc (fll[i] + 1);
+          memcpy (m.items[i].label, fl[i], fll[i]);
+          m.items[i].label[fll[i]] = 0;
+          m.items[i].annot_len = 0;
+          m.items[i].annot = NULL;
+          m.bytes += fll[i] + 1;
+        }
+      CHECK_EQ_U64 ((int) enca_ct_cache_insert (cache, &key, m),
+                    (int) ENCA_OK);
+
+      /* HIT must reproduce exactly the fresh label set */
+      const enca_ct_model *cached = NULL;
+      CHECK (enca_ct_cache_lookup (cache, &key, &cached));
+      if (cached->count != nf)
+        false_hits++;
+      else
+        {
+          for (size_t i = 0; i < nf && i < cached->count; i++)
+            {
+              size_t cl = cached->items[i].label_len;
+              if (cl != fll[i]
+                  || memcmp (cached->items[i].label, fl[i], cl) != 0)
+                {
+                  false_hits++;
+                  break;
+                }
+            }
+          legit_hits++;
+        }
+
+      printf ("    ORACLE|%s|fresh=%zu|false_hits=%ld|legit=%ld\n",
+              cases[cs], (size_t) nf, false_hits, legit_hits);
+      fflush (stdout);
+      free (body);
+    }
+
+  printf ("    ORACLETOTAL|false_hits=%ld|legit_hits=%ld\n",
+          false_hits, legit_hits);
+  fflush (stdout);
+  CHECK_EQ_U64 ((long) false_hits, 0);
+
+  enca_ct_cache_destroy (cache);
+  enca_lsp_session_destroy (s);
+}
+
+/* ---------------- C12: mixed hit/miss workload ---------------- */
+
+static void
+evs54_mixed_workload (void)
+{
+  const char *path = e5_clangd_or_skip ();
+  if (!path)
+    return;
+
+  enca_lsp_session *s = NULL;
+  enca_lsp_session_opts opts;
+  memset (&opts, 0, sizeof opts);
+  opts.clangd_path = path;
+  CHECK_EQ_U64 ((int) enca_lsp_session_create (ENCA_LSP_CLANGD, &opts,
+                                            &s),
+                (int) ENCA_OK);
+  enca_lsp_set_collect_timeout (s, 15000);
+
+  enca_ct_cache *cache = NULL;
+  CHECK_EQ_U64 ((int) enca_ct_cache_create (32, &cache), (int) ENCA_OK);
+
+  size_t blen = 0;
+  char *body = e5_body (4096, &blen);
+  enca_u64 version = 0;
+  CHECK_EQ_U64 ((int) enca_lsp_did_open (s, "file:///mix.c", body,
+                                      blen, ++version),
+                (int) ENCA_OK);
+  /* warmup so cold parse lands outside the measured window */
+  {
+    const char *rp = NULL;
+    size_t rl = 0;
+    enca_lsp_completion (s, "file:///mix.c", 0, blen / 2, &rp, &rl,
+                         NULL);
+    e5_msleep (300);
+  }
+
+  double lats[128];
+  int nl = 0, hits = 0, misses = 0, avoided = 0;
+  const int total = 24;
+
+  for (int i = 0; i < total; i++)
+    {
+      enca_ct_cache_key k;
+      memset (&k, 0, sizeof k);
+      k.document_id = 5;
+      k.revision = version;
+      k.cursor = blen;
+      k.trigger = ENCA_CT_MEMBER;
+      k.prefix_hash = enca_ct_cache_prefix_hash ("pr", 2);
+      k.lang_hash = enca_ct_cache_lang_hash ("c");
+
+      const enca_ct_model *hit = NULL;
+      enca_u64 t0 = enca_monotonic_now_ns ();
+      int is_hit = enca_ct_cache_lookup (cache, &k, &hit);
+      if (is_hit)
+        {
+          hits++;
+          avoided++;            /* zero backend contact on hit */
+        }
+      else
+        {
+          misses++;
+          const char *rp = NULL;
+          size_t rl = 0;
+          CHECK_EQ_U64 ((int) enca_lsp_completion (s, "file:///mix.c", 0,
+                                                blen, &rp, &rl, NULL),
+                        (int) ENCA_OK);
+          static const char *fl[256];
+          static size_t fll[256];
+          enca_usize nf = enca_json_collect_item_labels (rp, rl, fl, fll,
+                                                      256);
+          enca_ct_model m;
+          m.count = nf > 128 ? 128 : nf;
+          m.bytes = 0;
+          m.items = enca_malloc (m.count * sizeof (enca_ct_candidate));
+          for (size_t q = 0; q < m.count; q++)
+            {
+              m.items[q].label_len = fll[q];
+              m.items[q].label = enca_malloc (fll[q] + 1);
+              memcpy (m.items[q].label, fl[q], fll[q]);
+              m.items[q].label[fll[q]] = 0;
+              m.items[q].annot_len = 0;
+              m.items[q].annot = NULL;
+              m.bytes += fll[q] + 1;
+            }
+          enca_ct_cache_insert (cache, &k, m);
+        }
+      enca_u64 t1 = enca_monotonic_now_ns ();
+      lats[nl++] = (double) (t1 - t0) / 1e6;
+
+      /* every 3rd op: edit bumps revision -> conservative
+         invalidation forces the next op into a miss */
+      if (i % 3 == 2)
+        {
+          version++;
+          body[blen - 8] = (char) ('a' + i % 26);
+          CHECK_EQ_U64 ((int) enca_lsp_did_change_full (
+                            s, "file:///mix.c", body, blen, version),
+                        (int) ENCA_OK);
+          enca_ct_cache_on_edit (cache, 5);
+        }
+    }
+  e5_msleep (400);              /* let trailing backend work drain */
+
+  double sorted[128];
+  memcpy (sorted, lats, sizeof (double) * nl);
+  for (int x = 1; x < nl; x++)
+    {
+      double v = sorted[x];
+      int y = x - 1;
+      while (y >= 0 && sorted[y] > v)
+        { sorted[y + 1] = sorted[y]; y--; }
+      sorted[y + 1] = v;
+    }
+  double hit_rate = (double) hits / (double) nl * 100.0;
+  printf ("    C12|ops=%d|hits=%d|misses=%d|hit_rate=%.1f%%|"
+          "backend_avoided=%d|p50=%.3fms|p95=%.3fms|max=%.3fms\n",
+          nl, hits, misses, hit_rate, avoided, sorted[nl / 2],
+          sorted[(nl * 95) / 100], sorted[nl - 1]);
+  fflush (stdout);
+  CHECK (hit_rate >= 20.0);     /* pattern guarantees ~25% repeats */
+
+  free (body);
+  enca_ct_cache_destroy (cache);
+  enca_lsp_session_destroy (s);
+}
+
 void
 run_test_evs5 (void)
 {
@@ -382,4 +642,7 @@ run_test_evs5 (void)
   enca_test_run_suite ("evs52/stale-attribution",
                        evs52_stale_attribution);
   enca_test_run_suite ("evs53/cache-locality", evs53_cache_locality);
+  enca_test_run_suite ("evs54/dual-path-oracle",
+                       evs54_dual_path_oracle);
+  enca_test_run_suite ("evs54/mixed-workload", evs54_mixed_workload);
 }

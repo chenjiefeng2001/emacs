@@ -28,6 +28,7 @@ ctkey_hash (const enca_ct_cache_key *k)
   h = ctkey_mix (h, (enca_u64) k->cursor);
   h = ctkey_mix (h, (enca_u64) k->trigger);
   h = ctkey_mix (h, k->prefix_hash);
+  h = ctkey_mix (h, k->lang_hash);
   return h;
 }
 
@@ -36,7 +37,7 @@ ctkey_eq (const enca_ct_cache_key *a, const enca_ct_cache_key *b)
 {
   return a->document_id == b->document_id && a->revision == b->revision
          && a->cursor == b->cursor && a->trigger == b->trigger
-         && a->prefix_hash == b->prefix_hash;
+         && a->prefix_hash == b->prefix_hash && a->lang_hash == b->lang_hash;
 }
 
 /* ---------------- entry ---------------- */
@@ -284,6 +285,44 @@ enca_ct_cache_stats_get (const enca_ct_cache *c,
     *out = c->st;
   else
     memset (out, 0, sizeof *out);
+}
+
+/* ---------------- canonical hash helpers ---------------- */
+
+enca_u64
+enca_ct_cache_prefix_hash (const char *prefix, size_t len)
+{
+  enca_u64 h = (enca_u64) 1469598103934665603ull;
+  for (size_t i = 0; i < len; i++)
+    {
+      h ^= (unsigned char) prefix[i];
+      h *= (enca_u64) 1099511628211ull;
+    }
+  return h;
+}
+
+enca_u64
+enca_ct_cache_lang_hash (const char *language_id)
+{
+  enca_u64 h = (enca_u64) 1469598103934665613ull;
+  if (language_id)
+    for (const char *p = language_id; *p; p++)
+      {
+        h ^= (unsigned char) *p;
+        h *= (enca_u64) 1099511628211ull;
+      }
+  /* config epoch placeholder: bump when server config enters the
+     contract */
+  h = ctkey_mix (h, 0x636f6e666967ull);
+  return h;
+}
+
+/* Stage-C conservative policy wrapper: v1 has no unrelatedness proof,
+   so ANY edit invalidates the document's entries. */
+enca_usize
+enca_ct_cache_on_edit (enca_ct_cache *c, enca_object_id document_id)
+{
+  return enca_ct_cache_invalidate_document (c, document_id);
 }
 
 /* ---------------- prefix-extension filter (Phase B helper) ------- */

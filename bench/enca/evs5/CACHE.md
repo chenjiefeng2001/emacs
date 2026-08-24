@@ -90,3 +90,66 @@ B3 hit->local filter.  Expected shape: B0~B1~B2 ~80ms, B3 <1ms
 A wrong cached completion is worse than no cache.  Any false hit in
 the C10 matrix fails the phase regardless of latency numbers, and the
 prototype reverts to strict-key-only mode until root-caused.
+
+## 7. Stage C contract -- invalidation correctness (frozen 2026-08-24)
+
+### 7.1 Core invariant
+
+```
+cache_hit  =>  cached_result == fresh_backend_result_for_current_snapshot
+```
+
+NOT "prefix unchanged => reusable".  A miss is always permitted and
+falls back to the backend; a false hit is a correctness failure that
+fails the stage regardless of any latency number.
+
+### 7.2 Entry binding (minimum provenance)
+
+Every entry is bound to ALL of:
+
+```text
+document identity        (object id)
+language/config identity (lang_hash over language_id + config epoch)
+completion context/key   (cursor, trigger, prefix_hash)
+validity revision        (exact ENCA revision at insert; Phase D may
+                          relax this LAST, after C is green)
+```
+
+### 7.3 Invalidation policy v1 (conservative fallback)
+
+```text
+ANY document mutation that cannot be PROVEN unrelated to an entry's
+context  =>  invalidate that entry.
+v1 proof rule: none -- every edit invalidates the whole document.
+Retain-on-unrelated is allowed only with an oracle and only after
+hit-rate data justifies the complexity.
+```
+
+### 7.4 Edit-type matrix (all must MISS post-edit)
+
+before-cursor insert / inside-prefix insert / after-cursor insert /
+context modification / identifier rename / context deletion /
+whitespace-only change / comment change / far-region change / undo
+(revision revert) / redo / full replacement / close+reopen.
+
+Language/config change => full-cache clear.
+
+### 7.5 Dual-path oracle (test-phase only; production never does this)
+
+For every candidate hit, the harness ALSO fetches the authoritative
+fresh backend result for the current snapshot and compares canonical
+label sets.  Test phase may pay full backend cost per case.
+
+```
+current snapshot -> cache lookup -> cached labels
+                 -> fresh clangd -> fresh labels
+canonical(sorted) equal  => legitimate HIT
+otherwise                => FALSE HIT => stage fails
+```
+
+### 7.6 Gate additions
+
+C12 mixed workloads (H/M patterns, revision storm) report hit_rate,
+p50/p95/p99/p99.9, backend_requests_avoided, stale_drops,
+false_hits.  C13 real keypress->visible stays gated on 5.2.6 (elisp
+integration) and is NOT claimable from native numbers alone.

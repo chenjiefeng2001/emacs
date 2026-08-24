@@ -45,4 +45,12 @@ bool enca_json_get_u64 (const char *payload, size_t len,
 bool enca_json_has_member (const char *payload, size_t len,
                            const char *key);
 
+/* EVS-5.2 dual-path oracle: collect the "label" string of every item
+   in RESULT's items array (clangd completion shape).  Views borrow
+   PAYLOAD.  Returns total matches found (OUT receives at most CAP,
+   so a return value > CAP signals truncation). */
+enca_usize enca_json_collect_item_labels (
+    const char *payload, size_t len, const char **labels, size_t *lens,
+    size_t cap);
+
 #endif /* ENCA_LSP_JSONRPC_H */

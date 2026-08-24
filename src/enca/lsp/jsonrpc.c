@@ -341,3 +341,232 @@ enca_json_has_member (const char *payload, size_t len, const char *key)
   enca_u64 dummy = 0;
   return j_walk_value (payload, len, &i, key, false, &dummy, 0);
 }
+
+/* Locate the '[' that opens result.items (clangd completion shape).
+   Deliberately walks the top-level object then the result object so
+   sibling members are skipped with full bracket/string awareness. */
+static bool
+j_find_items_array (const char *j, size_t n, size_t *i)
+{
+  size_t p = j_skip_ws (j, n, 0);
+  if (p >= n || j[p] != '{')
+    return false;
+  p++;
+  const char *want1 = "result";
+  for (;;)
+    {
+      p = j_skip_ws (j, n, p);
+      if (p >= n)
+        return false;
+      if (j[p] == '}')
+        return false;
+      if (j[p] == ',')
+        {
+          p++;
+          continue;
+        }
+      if (j[p] != '"')
+        {
+          p++;
+          continue;
+        }
+      size_t ks = p + 1;
+      j_skip_string (j, n, &p);
+      size_t ke = p - 1;
+      p = j_skip_ws (j, n, p);
+      if (p >= n || j[p] != ':')
+        continue;
+      p = j_skip_ws (j, n, p + 1);
+      if ((size_t) (ke - ks) != strlen (want1)
+          || memcmp (j + ks, want1, strlen (want1)) != 0)
+        {
+          /* skip this value generically */
+          if (j[p] == '{' || j[p] == '[')
+            {
+              int depth = 0;
+              while (p < n)
+                {
+                  char c = j[p];
+                  if (c == '"')
+                    {
+                      j_skip_string (j, n, &p);
+                      continue;
+                    }
+                  if (c == '{' || c == '[')
+                    depth++;
+                  else if (c == '}' || c == ']')
+                    {
+                      depth--;
+                      p++;
+                      if (depth == 0)
+                        break;
+                      continue;
+                    }
+                  p++;
+                }
+            }
+          else
+            while (p < n && j[p] != ',' && j[p] != '}')
+              p++;
+          continue;
+        }
+      /* result found: expect object */
+      if (p >= n || j[p] != '{')
+        return false;
+      p++;
+      for (;;)
+        {
+          p = j_skip_ws (j, n, p);
+          if (p >= n)
+            return false;
+          if (j[p] == '}')
+            return false;
+          if (j[p] == ',')
+            {
+              p++;
+              continue;
+            }
+          if (j[p] != '"')
+            {
+              p++;
+              continue;
+            }
+          size_t k2s = p + 1;
+          j_skip_string (j, n, &p);
+          size_t k2e = p - 1;
+          p = j_skip_ws (j, n, p);
+          if (p >= n || j[p] != ':')
+            continue;
+          p = j_skip_ws (j, n, p + 1);
+          if ((size_t) (k2e - k2s) == 5
+              && memcmp (j + k2s, "items", 5) == 0)
+            {
+              if (p < n && j[p] == '[')
+                {
+                  *i = p + 1;
+                  return true;
+                }
+              return false;
+            }
+          if (j[p] == '{' || j[p] == '[')
+            {
+              int depth = 0;
+              while (p < n)
+                {
+                  char c = j[p];
+                  if (c == '"')
+                    {
+                      j_skip_string (j, n, &p);
+                      continue;
+                    }
+                  if (c == '{' || c == '[')
+                    depth++;
+                  else if (c == '}' || c == ']')
+                    {
+                      depth--;
+                      p++;
+                      if (depth == 0)
+                        break;
+                      continue;
+                    }
+                  p++;
+                }
+            }
+          else
+            {
+              while (p < n && j[p] != ',' && j[p] != '}')
+                p++;
+            }
+        }
+    }
+}
+
+enca_usize
+enca_json_collect_item_labels (const char *payload, size_t len,
+                               const char **labels, size_t *lens,
+                               size_t cap)
+{
+  size_t pos = 0;
+  if (!j_find_items_array (payload, len, &pos))
+    return 0;
+
+  enca_usize count = 0;
+  for (;;)
+    {
+      pos = j_skip_ws (payload, len, pos);
+      if (pos >= len)
+        break;
+      if (payload[pos] == ']')
+        break;
+      if (payload[pos] != '{')
+        {
+          pos++;
+          continue;
+        }
+
+      /* element object: find its end (string-aware), then locate the
+         label member inside. */
+      size_t elem_end = pos;
+      int depth = 0;
+      while (elem_end < len)
+        {
+          char c = payload[elem_end];
+          if (c == '"')
+            {
+              j_skip_string (payload, len, &elem_end);
+              continue;
+            }
+          if (c == '{')
+            depth++;
+          else if (c == '}')
+            {
+              depth--;
+              elem_end++;
+              if (depth == 0)
+                break;
+              continue;
+            }
+          elem_end++;
+        }
+
+      size_t p = pos + 1;
+      while (p < elem_end)
+        {
+          if (payload[p] != '"')
+            {
+              p++;
+              continue;
+            }
+          size_t ks = p + 1;
+          j_skip_string (payload, elem_end, &p);
+          size_t ke = p - 1;
+          size_t q = j_skip_ws (payload, elem_end, p);
+          if (q >= elem_end || payload[q] != ':')
+            continue;
+          q = j_skip_ws (payload, elem_end, q + 1);
+          if (q < elem_end && payload[q] == '"'
+              && ke - ks == 5 && memcmp (payload + ks, "label", 5) == 0)
+            {
+              size_t vs = q + 1;
+              size_t ve = q + 1;
+              j_skip_string (payload, elem_end, &ve);
+              /* ve = past closing quote; strip both quotes below */
+              if (ve > vs + 1)
+                {
+                  if (count < cap)
+                    {
+                      labels[count] = payload + vs;
+                      lens[count] = ve - vs - 1;
+                    }
+                  count++;
+                }
+              p = ve;
+            }
+        }
+      pos = elem_end;
+      pos = j_skip_ws (payload, len, pos);
+      if (pos < len && payload[pos] == ',')
+        pos++;
+    }
+  return count;
+}

@@ -25,7 +25,18 @@ typedef struct
   size_t cursor;
   unsigned trigger;             /* enca_ct_trigger                   */
   enca_u64 prefix_hash;         /* FNV-1a of raw prefix bytes        */
+  enca_u64 lang_hash;           /* language/config identity (7.2)    */
 } enca_ct_cache_key;
+
+/* Canonical hash helpers so every caller derives identical keys. */
+enca_u64 enca_ct_cache_prefix_hash (const char *prefix, size_t len);
+enca_u64 enca_ct_cache_lang_hash (const char *language_id);
+
+/* Semantic wrapper for the conservative Stage-C policy: ANY edit to
+   DOCUMENT_ID invalidates its entries (contract section 7.3 -- v1
+   cannot prove unrelatedness, so it never tries). */
+enca_usize enca_ct_cache_on_edit (enca_ct_cache *c,
+                                  enca_object_id document_id);
 
 typedef struct
 {
