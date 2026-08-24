@@ -55,6 +55,7 @@ Vanilla ≡ ENCA-disabled ≡ ENCA-enabled(所有 cell 比值 0.89–1.09,
 | **EVS-5.3 real typing (F1)** | retry 100% / growth avoided 34.4% / edit-interleaved 0%(by design)/ false_hits=0 | REPORT §26,results/evs53_real_typing.log |
 | **EVS-5.3.1 C13/C8c full** | 四类完整分布落地;hit 全路径 p50=4.6ms(redisplay 地板 ~4.5ms 主导,引擎 <0.15ms);§25 的 0.58ms 口径已修正 | CACHE.md §11,REPORT §27,results/evs531_ui_typing.log |
 | **EVS-5.4 real LSP** | 真 clangd 18.1.3 打通 elisp 用户路径;引擎 source 序列与 loopback 逐 op 一致(32/32);GROWTH 精确复现 F1;false_hit=0 | REAL_LSP.md §6,REPORT §28,results/evs54_real_lsp.log |
+| **EVS-5.5 edit trace** | 测量仪器落地:EditRelation/H0-H4 分类 + 引擎真值校验;复用上限按行为双峰(打字链 0% vs 无关区编辑 91%);H0m 键碎片发现;Stage-D 决策公式两端仍缺真实数据 | TRACE.md §6,REPORT §29,results/evs55_trace.log |
 
 ---
 
@@ -95,11 +96,13 @@ GUI renderer、Range Snapshot、tree-sitter、cross-revision reuse
 ## 5. 下一步(按优先级)
 
 ### 候选 1 — F2/cross-revision(Stage D)
-已被 F1 数据推迟:edit-interleaved 类 0% 是真实痛点,但安全复用
-需要 unrelatedness proof rule(尚不存在)。启动前置条件:
-- 真实用户数据显示 edit-after-completion 场景占比足以证明复杂度
-- 先写契约修订(CACHE.md §2 扩展),再实现
-- 绝对门禁不变:false_hit = 0
+前置条件已部分兑现:EVS-5.5 轨迹仪器落地(TRACE.md),给出逐行为
+复用上限——打字链 0%、参数生长 80%、无关区编辑 91%、混合合成 15.4%,
+以及 H0m 键碎片这一低成本替代线索。**仍缺的两端**:真实用户
+edit-after-completion 行为占比(决定 P(H1) 的实际权重)与本机真实
+项目后端延迟(决定乘数)。决策公式 = P(H1)×backend_latency − 复杂度
+成本;任一端补齐前维持关闭。启动顺序不变:先契约修订(CACHE.md §2
+扩展,纳入 H0m 键归一化议题),再实现;false_hit=0 绝对门禁不变。
 
 ### 候选 2 — C13/C8c 完整版 ✅ 已完成(2026-08-25,EVS-5.3.1)
 真实打字四类 × 真实 popup/redisplay 全分布已落地(CACHE.md §11 /
@@ -183,3 +186,8 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > 对后端替换完全透明;真实项目后端主导性不变。下一优先级仍是
 > §5 候选 1 的前置条件——拿到真实用户 edit-after-completion 占比
 > 数据之前,不做 Stage-D。)
+>
+> (2026-08-25 三补:EVS-5.5 把"等数据"变成了"有仪器地等"。复用
+> 上限按行为双峰:无关区编辑 91% / 打字链 0%;另发现 H0m 键碎片
+> 这一可能更便宜的替代方向。Stage-D 的 Go/No-Go 现在是一个乘法
+> 公式,只差真实用户分布与本机真实项目延迟两个实测输入。)

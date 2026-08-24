@@ -905,3 +905,27 @@ NOVEL 真实 miss p50 ~4.6ms 远低于注入 90ms 与 B2 真实项目 ~77ms:合�
 
 ### 28.6 环境
 WSL 侧 `apt install clangd`(18.1.3)、valgrind 已装;Windows clangd 19.1 未用(构建树在 WSL)。
+
+
+## 29. EVS-5.5 Closure — 真实补全/编辑轨迹测量(2026-08-25)
+
+### 29.1 定位与契约
+测量专用阶段:零 cache/引擎改动(纯 elisp harness),为 Stage-D 决策提供此前一直缺失的输入。事件模型 CompletionEvent + EditRelation 十类关系 + H0–H4 请求分类 + 引擎真值交叉校验,全部冻结于 bench/enca/evs5/TRACE.md。
+
+### 29.2 结果(真 clangd 18.1.3;原始数据 results/evs55_trace.log)
+| cell | requests | H0 | H0m | **H1** | H2 | H3 | H4 | safe% | eng_hits |
+|---|---|---|---|---|---|---|---|---|---|
+| IDGROW 打字链 | 13 | 1 | 0 | 0 | 0 | 0 | 12 | 0% | 1 |
+| CALLARGS 参数生长 | 5 | 0 | 0 | **4** | 0 | 0 | 1 | **80%** | 0 |
+| CURSOR 纯移动 | 5 | 0 | 4 | 0 | 0 | 0 | 1 | 0% | 2 |
+| FAREDIT 无关区编辑 | 11 | 0 | 0 | **10** | 0 | 0 | 1 | **91%** | 0 |
+| SESSION 混合权重 | 26 | 0 | 10 | 4 | 1 | 0 | 11 | **15.4%** | 5 |
+
+### 29.3 判定
+- **复用上限按行为双峰分布**:打字链 0%(每键都在改 token,判 H4/H2 正确);无关区编辑 91%、参数生长 80% —— 这才是 Stage-D 能变现的行为。混合合成会话 15.4%,低于 20% 讨论线,但权重是我们脚本的、不是用户的。
+- **H0m 发现**:纯光标移动即改变 cache key(cursor 参与键)而语义不变;14 例中 7 例仍命中(同 revision 内键重复)。键归一化层可能以低于 Stage-D 的复杂度拿到部分收益——进入 Stage-D 成本侧公式。
+- UNDO 5/5 按保守策略判不安全 ✓;引擎真值零矛盾:false_hit=0 门禁在轨迹层继续保持。
+- 决策公式 P(H1)×backend_latency 两端均缺真实数据:(a) 用户 edit-after-completion 行为占比,(b) 本机真实项目后端延迟。**Stage-D 维持关闭,但从空白页变成了带测量仪器与逐行为上限的受控等待。**
+
+### 29.4 排障记录
+harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全 nobackend;②空前缀种子请求用于锚定首键分类;③字符串下标(0 基)vs 缓冲位置(1 基)差一偏移导致 CALLARGS 首参数并入 token("proca")——EDT55 证据行 + 批量探针定位,常量统一为缓冲位置后消除。
