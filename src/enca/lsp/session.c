@@ -527,11 +527,14 @@ enca_lsp_did_change_full (enca_lsp_session *s, const char *uri,
   r = jb_put_json_string (&s->out, text, len);
   if (r != ENCA_OK)
     return r;
-  r = jb_puts (&s->out, "}]}");
+  /* Close: change object, contentChanges array, params, request. */
+  r = jb_puts (&s->out, "}]}}");
   if (r != ENCA_OK)
     return r;
 
-  return drain_echo_if_loopback (s, send_frame (s, s->out.buf, s->out.len, NULL, NULL));
+  return drain_echo_if_loopback (s,
+                                 send_frame (s, s->out.buf, s->out.len,
+                                             NULL, NULL));
 }
 
 /* Send ONE request and read ITS response frame back.  On success the

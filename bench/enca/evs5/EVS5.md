@@ -184,3 +184,28 @@ D nothing actionable?       n/a
 **Next concrete lever: ENCA-level completion cache (EVS-5.2 phase,
 data contract already frozen in section 3).**  Backend stays a black
 box we cannot and should not modify.
+
+## 6.1 Post-fix re-run + a real bug found by attribution (2026-08-24)
+
+The first 5.1 run exposed clangd-side `JSON parse error` for every
+didChange frame.  Root cause: `enca_lsp_did_change_full` terminated
+its payload with `}]}` -- one closing brace short (params closed, the
+outer request object never did).  Windows builds never noticed
+(WriteFile path unaffected; only the server's parser saw it).
+
+Consequence: in EVS-4.3's storm-real harness the document updates
+never reached clangd -- its responses were computed over STALE text.
+Numbers from that harness are therefore re-measured below.
+
+Fixed + re-run (raw stream: bench/results/evs5_backend_attribution.log):
+
+```
+CTXSWEEP 32B..32KB : p50 flat band 61.6 - 78.4 ms   (D1 falsified, again)
+STALE burst        : 4/12 answered, rest coalesced server-side
+STALE + cancel     : newest-only answering confirmed
+CACHE all variants : 61.6 - 76.8 ms flat            (zero locality)
+```
+
+Decision tree unchanged and now measured over a CORRECT protocol:
+D1 NO-GO, D2 no headroom, D3 (client-side cache) remains the only
+promoted lever.  Suite: 34059 checks / 0 failures.
