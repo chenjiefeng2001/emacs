@@ -31,6 +31,9 @@ typedef struct
   const char *clangd_path;      /* required for ENCA_LSP_CLANGD      */
   const char *root_uri;         /* may be NULL                       */
   const char *language_id;      /* default "c"                       */
+  char *const *exec_argv;       /* NULL-terminated EXTRA argv after
+                                   the program path (e.g. script
+                                   args); may be NULL                */
 } enca_lsp_session_opts;
 
 enca_result enca_lsp_session_create (enca_lsp_mode mode,
@@ -100,6 +103,10 @@ enca_result enca_lsp_collect_response (enca_lsp_session *s,
 
 /* Collect/read idle deadline (attribution harnesses shorten it). */
 void enca_lsp_set_collect_timeout (enca_lsp_session *s, unsigned ms);
+
+/* Simulated backend think-time for LOOPBACK sessions (attribution
+   harnesses); ignored by CLANGD sessions. */
+void enca_lsp_set_backend_delay_ms (enca_lsp_session *s, unsigned ms);
 
 /* Layer-2 cancellation for a SPECIFIC outstanding id. */
 enca_result enca_lsp_cancel_id (enca_lsp_session *s, enca_u64 id);

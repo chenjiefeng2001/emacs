@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <time.h>
 
 #ifdef _WIN32
 # define WIN32_LEAN_AND_MEAN
@@ -62,6 +64,7 @@ struct enca_lsp_session
   /* Flow accounting for storm experiments (contract section 4). */
   enca_u64 requests_sent;
   enca_u64 responses_received;
+  unsigned backend_delay_ms;
 };
 
 static enca_result handshake (enca_lsp_session *s, const char *root_uri);
@@ -72,6 +75,7 @@ static enca_result drain_echo_if_loopback (enca_lsp_session *s,
 
 static enca_result
 spawn_clangd (enca_lsp_session *s, const char *path,
+              char *const *extra_argv,
               enca_lsp_endpoint child_stdin, enca_lsp_endpoint child_stdout)
 {
 #ifdef _WIN32
@@ -84,7 +88,14 @@ spawn_clangd (enca_lsp_session *s, const char *path,
   si.hStdInput = (HANDLE) child_stdin.h;
   si.hStdOutput = (HANDLE) child_stdout.h;
   si.hStdError = GetStdHandle (STD_ERROR_HANDLE);
-  snprintf (cmd, sizeof cmd, "\"%s\" --log=error", path);
+  {
+    size_t off
+      = (size_t) snprintf (cmd, sizeof cmd, "\"%s\" --log=error", path);
+    if (extra_argv)
+      for (char *const *a = extra_argv; *a && off < sizeof cmd; a++)
+        off += (size_t) snprintf (cmd + off, sizeof cmd - off,
+                                  " \"%s\"", *a);
+  }
   if (!CreateProcessA (NULL, cmd, NULL, NULL, TRUE, 0, NULL, NULL, &si,
                        &pi))
     return ENCA_ERR_CLOSED;
@@ -100,7 +111,32 @@ spawn_clangd (enca_lsp_session *s, const char *path,
     {
       dup2 (child_stdin.fd, 0);
       dup2 (child_stdout.fd, 1);
-      execlp (path, path, "--log=error", (char *) NULL);
+      char *argv[32];
+      int argc = 0;
+      argv[argc++] = (char *) path;
+      argv[argc++] = (char *) "--log=error";
+      if (extra_argv)
+        for (char *const *a = extra_argv; *a && argc < 30; a++)
+          argv[argc++] = *a;
+      argv[argc] = NULL;
+      {
+        FILE *dbg = fopen ("/tmp/exec_dbg.txt", "a");
+        if (dbg)
+          {
+            fprintf (dbg, "execvp path=%s argc=%d\n", path, argc);
+            fclose (dbg);
+          }
+      }
+      execvp (path, argv);
+      {
+        FILE *dbg = fopen ("/tmp/exec_dbg.txt", "a");
+        if (dbg)
+          {
+            fprintf (dbg, "execvp FAILED errno=%d (%s)\n",
+                     errno, strerror (errno));
+            fclose (dbg);
+          }
+      }
       _exit (127);
     }
   s->pid = pid;
@@ -339,8 +375,8 @@ enca_lsp_session_create (enca_lsp_mode mode,
       enca_lsp_endpoint_close (&child_stdin_rd);
       goto fail;
     }
-  r = spawn_clangd (s, opts->clangd_path, child_stdin_rd,
-                    child_stdout_wr);
+  r = spawn_clangd (s, opts->clangd_path, opts->exec_argv,
+                    child_stdin_rd, child_stdout_wr);
   enca_lsp_endpoint_close (&child_stdin_rd);
   enca_lsp_endpoint_close (&child_stdout_wr);
   if (r != ENCA_OK)
@@ -552,6 +588,17 @@ round_trip (enca_lsp_session *s, const char *payload, size_t len,
     return r;
   const enca_u64 t1 = enca_monotonic_now_ns ();
 
+  /* Simulated backend think-time (LOOPBACK attribution): injected
+     between write-complete and response-read so the request-response
+     path pays realistic backend cost. */
+  if (s->mode == ENCA_LSP_LOOPBACK && s->backend_delay_ms)
+    {
+      struct timespec ts;
+      ts.tv_sec = (time_t) (s->backend_delay_ms / 1000);
+      ts.tv_nsec = (long) (s->backend_delay_ms % 1000) * 1000000L;
+      nanosleep (&ts, NULL);
+    }
+
   /* Skip server notifications until the frame carrying EXPECT_ID
      arrives (publishDiagnostics etc. interleave freely). */
   const char *rp = NULL;
@@ -755,6 +802,21 @@ enca_lsp_collect_response (enca_lsp_session *s, enca_u64 expect_id,
                            const char **response, size_t *response_len,
                            enca_u64 *arrive_ns)
 {
+  /* LOOPBACK simulated think-time: injected BEFORE the reply is
+     read so MISS-arm attribution includes realistic backend cost. */
+  if (s->mode == ENCA_LSP_LOOPBACK && s->backend_delay_ms)
+    {
+      struct timespec ts;
+      ts.tv_sec = (time_t) (s->backend_delay_ms / 1000);
+      ts.tv_nsec = (long) (s->backend_delay_ms % 1000) * 1000000L;
+      nanosleep (&ts, NULL);
+    }
+#ifdef LSP_DEBUG_DELAY
+  else
+    fprintf (stderr, "[dbg] collect no-delay mode=%d dly=%u\n",
+             (int) s->mode, s->backend_delay_ms);
+#endif
+
   /* Server-initiated NOTIFICATIONS (publishDiagnostics etc.) carry no
      id and must be skipped until the frame with the matching id
      arrives.  EXPECT_ID == 0 accepts any id-bearing response (storm
@@ -829,4 +891,13 @@ enca_lsp_set_collect_timeout (enca_lsp_session *s, unsigned ms)
   (void) s;                     /* process-global knob, deliberately */
   if (ms)
     lsp_collect_timeout_ms = ms;
+}
+void
+enca_lsp_set_backend_delay_ms (enca_lsp_session *s, unsigned ms)
+{
+  if (s)
+    {
+      s->backend_delay_ms = ms;
+      fprintf (stderr, "[dbg] set delay=%u\n", ms);
+    }
 }

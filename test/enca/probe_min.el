@@ -1,0 +1,8 @@
+(message "step1 start")
+(enca-evs-start 1 nil (quote loopback))
+(message "step2 started ok")
+(enca-evs-complete "print" 5)
+(message "step3 complete done")
+(enca-evs-stop)
+(message "step4 stopped")
+(kill-emacs 0)

@@ -153,3 +153,32 @@ C12 mixed workloads (H/M patterns, revision storm) report hit_rate,
 p50/p95/p99/p99.9, backend_requests_avoided, stale_drops,
 false_hits.  C13 real keypress->visible stays gated on 5.2.6 (elisp
 integration) and is NOT claimable from native numbers alone.
+
+## 8. Stage 5.2.6 outcome -- real elisp integration (2026-08-24)
+
+Cache wired into the REAL slice: enca-evs-complete runs the full user
+path in a live tty Emacs (keypress -> capture/snapshot -> scheduler ->
+cache-or-backend -> wakeup -> candidates -> popup overlay install ->
+forced redisplay -> visible).  MISS-arm backend cost simulated at
+90ms via loopback think-time injection (transport + parse are real;
+server compute simulated -- clangd itself measured ~78-92ms in
+EVS-4.3).
+
+| arm | ops | hit% | keypress->visible p50 | max |
+|---|---|---|---|---|
+| HIT (repeat prefix) | 20 | 100% | **0.58 ms** | 2.0 ms |
+| MISS (+90ms backend) | 12 | 0% | 90.4 ms | 90.6 ms |
+| MIX (alternating) | 16 | 50% | 90.3 ms | 90.5 ms |
+
+Gates:
+- C8c hit-path visible <1ms: MET (p50 0.58ms incl. popup+redisplay).
+- C11 backend avoidance on hit: structural (hit never leaves the
+  engine) + observed zero backend traffic during HIT arm.
+- C10 false hits: dual-path oracle over 7 edit cases = 0 (Stage C).
+- C13 hit rate: 100% repeats / 50% alternating / 0% novel-prefix --
+  reported, threshold deferred to real-typing study.
+
+Verdict: the cache converts the ~80ms backend term into sub-millisecond
+visible latency for repeat workloads -- the first two-orders-of-
+magnitude user-path win in the project.  Novel-prefix misses remain
+backend-bound (~90ms), which is exactly the shape modern IDEs have.

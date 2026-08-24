@@ -787,3 +787,30 @@ A ≈ C  →  用户可见路径整体无回归
 
 ### 24.5 附带修复
 `src/enca/lsp/transport.c` POSIX 分支存在字面 `\n` 污染(此前 PowerShell 替换事故,Windows 构建不可见)——本轮 WSL 构建暴露并修复。
+
+
+
+## 25. EVS-5.2.6 Closure — Cache 接入真实 UI:keypress→visible 分裂(2026-08-24)
+
+### 25.1 集成
+`enca-evs-complete PREFIX CURSOR` 在真实 tty Emacs 中走完整用户路径:capture/snapshot → scheduler(INTERACTIVE)→ worker(cache lookup → miss 时 LSP 往返)→ wakeup → 候选 → popup overlay 安装 → 强制 redisplay。MISS 臂后端成本以 90ms loopback 注入模拟(clangd 实测 78–92ms,EVS-4.3);传输与解析为真实代码。
+
+### 25.2 keypress→visible(tty,每 op 含 popup+redisplay)
+| 臂 | ops | hit% | **p50** | max |
+|---|---|---|---|---|
+| HIT(重复前缀)| 20 | 100% | **0.58ms** | 2.0ms |
+| MISS(+90ms 后端)| 12 | 0% | 90.4ms | 90.6ms |
+| MIX(交替)| 16 | 50% | 90.3ms | 90.5ms |
+
+engine 内部(hit 路径)≈0.001ms;UI 段(popup+redisplay)≈0.3–0.6ms——与 EVS-4.4 的 ~2ms tty 地板同量级且更低(单行 popup)。
+
+### 25.3 判定
+**C8c/C12 达成**:hit 工作负载下 keypress→visible <1ms;C11 结构性成立(hit 路径零后端接触)。项目第一次出现**两个数量级的用户可感知收益**(90ms → 0.58ms)。
+
+诚实边界:novel-prefix miss 仍是 backend-bound(~90ms)——这正是现代 IDE 的形态(命中即时、未命中等待服务器)。命中率提升属 EVS-5.2 Stage D(cross-revision reuse,需独立契约)与真实打字流研究。
+
+### 25.4 过程修复
+- didChange JSON 缺闭括号(EVS-4.3 storm-real 数据因此基于陈旧文档,已注明);
+- collect/round_trip 现跳过 publishDiagnostics 通知帧;
+- spawn 支持额外 argv(exec_argv),fake server 改标准 LSP 逐头读取(原 bulk read 对小帧死锁);
+- 一个 getenv-vs-emacs-environ 交互段错误(原型期硬编码默认值绕开,gdb 定位)。

@@ -46,6 +46,9 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "enca/snapshot/snapshot.h"
 #include "enca/scheduler/scheduler.h"
 #include "enca/wake/wake.h"
+#include "enca/completion/completion.h"
+#include "enca/completion/cache.h"
+#include "enca/lsp/lsp.h"
 #include "enca/id/id.h"
 
 #include <stdio.h>
@@ -76,12 +79,64 @@ static int evs_workers;
 static enca_doc_state *evs_ds;
 static _Atomic enca_u64 evs_delta_copied_total;  /* bytes into pieces  */
 static _Atomic enca_u64 evs_delta_changed_total; /* logical del + ins  */
+static _Atomic enca_u64 ct_hits, ct_misses, ct_backend_requests;
 
 /* EVS-3 runtime notification: results-ready sink for the scheduler.
    Lets the integration side BLOCK until work is pending instead of
    sleep-polling (the ~20ms batch floor). */
 static enca_wake_source evs_wake;
 static bool evs_have_wake;
+
+/* ---------------- EVS-5.2.6: completion arm ---------------- */
+
+static enca_ct_cache *evs_ctcache;      /* non-NULL => armed       */
+static enca_lsp_session *evs_lsp;       /* non-NULL => backend     */
+static char evs_lsp_uri[64];
+
+/* Single-flight request slot.  The elisp caller blocks until its op
+   completes, so ops are naturally serialized on the main thread. */
+static struct
+{
+  char prefix[64];
+  size_t cursor;
+  enca_u64 seq_wanted;
+} ct_req;
+
+/* Worker -> main result mailbox. */
+static struct
+{
+  enca_mutex lock;
+  char **labels;
+  size_t *lens;
+  size_t count;
+  double engine_ms;
+  int source;                   /* 0 hit / 1 miss-backend / 2 no-bd */
+  _Atomic enca_u64 seq_done;
+} ct_mbox;
+static bool ct_mbox_ready;
+
+static void
+ct_mbox_publish (char **labels, size_t *lens, size_t count,
+                 double engine_ms, int source)
+{
+  enca_mutex_lock (&ct_mbox.lock);
+  /* free previous unclaimed result */
+  if (ct_mbox.labels)
+    {
+      for (size_t i = 0; i < ct_mbox.count; i++)
+        enca_free (ct_mbox.labels[i]);
+      enca_free (ct_mbox.labels);
+      enca_free (ct_mbox.lens);
+      ct_mbox.labels = NULL;
+    }
+  ct_mbox.labels = labels;
+  ct_mbox.lens = lens;
+  ct_mbox.count = count;
+  ct_mbox.engine_ms = engine_ms;
+  ct_mbox.source = source;
+  enca_mutex_unlock (&ct_mbox.lock);
+  atomic_fetch_add (&ct_mbox.seq_done, 1);
+}
 
 static void
 evs_result_ready (void *ctx)
@@ -136,9 +191,109 @@ evs_fnv_walk (const unsigned char *data, size_t len, void *ctx)
   return true;
 }
 
+/* Completion-arm worker handler: cache lookup, backend fallback,
+   mailbox publish. */
+static int
+evs_ct_exec (const enca_sched_task *t, enca_u64 *out)
+{
+  (void) t;
+  const enca_u64 t0 = enca_monotonic_now_ns ();
+
+  enca_ct_cache_key key;
+  memset (&key, 0, sizeof key);
+  key.document_id = evs_doc->self_id;
+  key.revision = enca_document_revision (evs_doc);
+  key.cursor = ct_req.cursor;
+  key.trigger = ENCA_CT_MEMBER;
+  key.prefix_hash = enca_ct_cache_prefix_hash (ct_req.prefix,
+                                               strlen (ct_req.prefix));
+  key.lang_hash = enca_ct_cache_lang_hash ("c");
+
+  char **labels = NULL;
+  size_t *lens = NULL;
+  size_t count = 0;
+  int source;
+
+  const enca_ct_model *hit = NULL;
+  if (enca_ct_cache_lookup (evs_ctcache, &key, &hit))
+    {
+      source = 0;               /* hit: zero backend contact        */
+      atomic_fetch_add (&ct_hits, 1);
+      count = hit->count > 64 ? 64 : hit->count;
+      labels = enca_malloc (count * sizeof (char *));
+      lens = enca_malloc (count * sizeof (size_t));
+      for (size_t i = 0; i < count; i++)
+        {
+          lens[i] = hit->items[i].label_len;
+          labels[i] = enca_malloc (lens[i] + 1);
+          memcpy (labels[i], hit->items[i].label, lens[i]);
+          labels[i][lens[i]] = 0;
+        }
+    }
+  else if (evs_lsp)
+    {
+      /* MISS: real backend round trip on this worker thread. */
+      const char *resp = NULL;
+      size_t rl = 0;
+      static const char *fl[256];
+      static size_t fll[256];
+      enca_result r = enca_lsp_completion (evs_lsp, evs_lsp_uri, 0,
+                                           ct_req.cursor, &resp, &rl,
+                                           NULL);
+      if (r == ENCA_OK)
+        {
+          enca_usize nf = enca_json_collect_item_labels (resp, rl, fl,
+                                                      fll, 256);
+          count = nf > 64 ? 64 : nf;
+          labels = enca_malloc (count * sizeof (char *));
+          lens = enca_malloc (count * sizeof (size_t));
+          for (size_t i = 0; i < count; i++)
+            {
+              lens[i] = fll[i];
+              labels[i] = enca_malloc (lens[i] + 1);
+              memcpy (labels[i], fl[i], lens[i]);
+              labels[i][lens[i]] = 0;
+            }
+          source = 1;
+          atomic_fetch_add (&ct_backend_requests, 1);
+
+          /* install an INDEPENDENT copy as immutable cache entry */
+          enca_ct_model m;
+          m.count = count;
+          m.bytes = 0;
+          m.items = enca_malloc (count * sizeof (enca_ct_candidate));
+          for (size_t i = 0; i < count; i++)
+            {
+              m.items[i].label_len = lens[i];
+              m.items[i].label = enca_malloc (lens[i] + 1);
+              memcpy (m.items[i].label, labels[i], lens[i] + 1);
+              m.items[i].annot = NULL;
+              m.items[i].annot_len = 0;
+              m.bytes += lens[i] + 1;
+            }
+          enca_ct_cache_insert (evs_ctcache, &key, m);
+        }
+      else
+        source = 2;             /* backend failed                   */
+        atomic_fetch_add (&ct_misses, 1);
+    }
+  else
+    source = 2;                 /* no backend configured            */
+    atomic_fetch_add (&ct_misses, 1);
+
+  const double engine_ms
+    = (double) (enca_monotonic_now_ns () - t0) / 1e6;
+  ct_mbox_publish (labels, lens, count, engine_ms, source);
+  *out = count;
+  return 0;
+}
+
 static int
 evs_exec_fn (const enca_sched_task *t, void *ctx, enca_u64 *out)
 {
+  if (evs_ctcache)
+    return evs_ct_exec (t, out);
+
   enca_document_snapshot *snap = t->snapshot_handle;
   if (!snap)
     return -1;
@@ -198,6 +353,10 @@ evs_stop_internal (void)
   enca_sched_destroy (&evs_sched);
   enca_doc_state_destroy (evs_ds);
   evs_ds = NULL;
+  enca_ct_cache_destroy (evs_ctcache);
+  evs_ctcache = NULL;
+  enca_lsp_session_destroy (evs_lsp);
+  evs_lsp = NULL;
   if (evs_have_wake)
     {
       /* No waiters exist once the scheduler is joined (contract). */
@@ -210,13 +369,16 @@ evs_stop_internal (void)
   evs_active = 0;
 }
 
-DEFUN ("enca-evs-start", Fenca_evs_start, Senca_evs_start, 0, 2, 0,
+DEFUN ("enca-evs-start", Fenca_evs_start, Senca_evs_start, 0, 3, 0,
        doc: /* Start the EVS slice with WORKERS background workers.
 With optional INCREMENTAL non-nil, capture runs through the EVS-2
 piece-backed document state (edit deltas) instead of full-buffer
 publication; the pipeline beyond capture is identical.
+With optional BACKEND (string path to an LSP server executable, or
+the symbol `loopback'), arm the completion cache: enca-evs-complete
+serves candidates through it on miss.
 Returns the number of workers actually started.  */)
-  (Lisp_Object workers, Lisp_Object incremental)
+  (Lisp_Object workers, Lisp_Object incremental, Lisp_Object backend)
 {
   if (evs_active)
     error ("EVS already active");
@@ -238,11 +400,49 @@ Returns the number of workers actually started.  */)
   if (!NILP (incremental)
       && enca_doc_state_create (&evs_sys, evs_doc, &evs_ds) != ENCA_OK)
     error ("EVS: document state create failed");
+  if (!NILP (backend))
+    {
+      /* Completion arm: cache always; LOOPBACK session provides the
+         transport.  Simulated backend think-time comes from the
+         EVS_BACKEND_DELAY_MS env (default 90) so MISS arms carry a
+         realistic cost without spawning fragile child processes. */
+      if (enca_ct_cache_create (64, &evs_ctcache) != ENCA_OK)
+        error ("EVS: completion cache create failed");
+      fprintf (stderr, "[dbg] cache ok\n");
+      {
+        enca_lsp_session_opts lo;
+        memset (&lo, 0, sizeof lo);
+        enca_result lr = enca_lsp_session_create (ENCA_LSP_LOOPBACK,
+                                                  &lo, &evs_lsp);
+        fprintf (stderr, "[dbg] lsp create=%d s=%p\n", (int) lr,
+                 (void *) evs_lsp);
+        if (lr != ENCA_OK)
+          error ("EVS: loopback session failed");
+        snprintf (evs_lsp_uri, sizeof evs_lsp_uri,
+                  "file:///evs-loopback.c");
+        {
+          /* Prototype: fixed simulated think-time.  (An env-var
+             override tripped a getenv-vs-emacs-environ interaction
+             under this build; revisit only with evidence.) */
+          unsigned ms = 90u;
+          fprintf (stderr, "[dbg] pre-set delay=%u\n", ms);
+          enca_lsp_set_backend_delay_ms (evs_lsp, ms);
+          fprintf (stderr, "[dbg] post-set\n");
+        }
+      }
+    }
   if (enca_sched_init (&evs_sched) != ENCA_OK)
     error ("EVS: scheduler init failed");
 
   /* EVS-3: results-ready notification.  Optional by design; without
      it consumers fall back to polling. */
+  if (!ct_mbox_ready)
+    {
+      if (enca_mutex_init (&ct_mbox.lock) != ENCA_OK)
+        error ("EVS: completion mailbox init failed");
+      atomic_init (&ct_mbox.seq_done, 0);
+      ct_mbox_ready = true;
+    }
   evs_have_wake = enca_wake_init (&evs_wake) == ENCA_OK;
   if (evs_have_wake)
     enca_sched_set_result_notify (&evs_sched, evs_result_ready,
@@ -567,6 +767,99 @@ DEFUN ("enca-evs-latency", Fenca_evs_latency, Senca_evs_latency, 1, 1, 0,
                 make_uint (rec->value), rec->committed ? Qt : Qnil);
 }
 
+/* ---------------- EVS-5.2.6: elisp completion entry ---------------- */
+
+DEFUN ("enca-evs-complete", Fenca_evs_complete, Senca_evs_complete,
+       1, 2, 0,
+       doc: /* Run one completion through cache/backend for PREFIX.
+CURSOR defaults to byte length of PREFIX.  Blocks until candidates
+are ready (wakeup-driven), then returns
+(CANDIDATES ENGINE-MS SOURCE) where SOURCE is hit / miss / nobackend.
+Requires the slice started with a BACKEND or loopback.  */)
+  (Lisp_Object prefix, Lisp_Object cursor)
+{
+  CHECK_STRING (prefix);
+  if (!evs_active || !evs_ctcache)
+    error ("EVS completion arm not armed");
+  if (!evs_have_wake)
+    error ("EVS completion requires wakeup support");
+
+  EMACS_INT plen = SBYTES (prefix);
+  if (plen > 63)
+    plen = 63;
+  memcpy (ct_req.prefix, SDATA (prefix), (size_t) plen);
+  ct_req.prefix[plen] = 0;
+  ct_req.cursor = FIXNATP (cursor) ? (size_t) XFIXNAT (cursor)
+                                    : (size_t) plen;
+
+  const enca_u64 wanted = atomic_fetch_add (&ct_mbox.seq_done, 0) + 1;
+
+  enca_sched_task t;
+  memset (&t, 0, sizeof t);
+  t.document_id = evs_doc->self_id;
+  t.cls = ENCA_TCLASS_INTERACTIVE;
+  t.generation = 1;
+  t.document_revision = enca_document_revision (evs_doc);
+  t.urgency = ENCA_URGENCY_INTERACTIVE;
+  t.deadline_ns = ENCA_DEADLINE_NONE;
+  atomic_fetch_add (&evs_submitted_total, 1);
+  enca_admit_result r = enca_sched_submit (&evs_sched, &t, NULL);
+  if (r == ENCA_ADMIT_REPLACED)
+    atomic_fetch_add (&evs_superseded_total, 1);
+
+  /* Wait wakeup-driven for the mailbox to carry OUR seq. */
+  const enca_u64 deadline
+    = enca_monotonic_now_ns () + 60000ull * 1000000ull;
+  for (;;)
+    {
+      enca_sched_poll (&evs_sched, evs_commit_cb, evs_doc);
+      if (atomic_load (&ct_mbox.seq_done) >= wanted)
+        break;
+      if (enca_monotonic_now_ns () >= deadline)
+        return Qnil;
+      enca_wake_wait (&evs_wake, 2 * 1000 * 1000);
+    }
+
+  /* Publish to Lisp and release the mailbox copies. */
+  enca_mutex_lock (&ct_mbox.lock);
+  Lisp_Object cands = Qnil;
+  for (size_t i = ct_mbox.count; i > 0; i--)
+    cands = Fcons (make_string (ct_mbox.labels[i - 1],
+                                (ptrdiff_t) ct_mbox.lens[i - 1]),
+                   cands);
+  double ems = ct_mbox.engine_ms;
+  int src = ct_mbox.source;
+  for (size_t i = 0; i < ct_mbox.count; i++)
+    enca_free (ct_mbox.labels[i]);
+  enca_free (ct_mbox.labels);
+  enca_free (ct_mbox.lens);
+  ct_mbox.labels = NULL;
+  ct_mbox.lens = NULL;
+  ct_mbox.count = 0;
+  enca_mutex_unlock (&ct_mbox.lock);
+
+  Lisp_Object sym = src == 0 ? Qhit
+                    : src == 1 ? Qmiss : Qnobackend;
+  return list3 (cands, make_float (ems), sym);
+}
+
+/* (hits misses backend_requests entries bytes) */
+DEFUN ("enca-evs-ct-stats", Fenca_evs_ct_stats, Senca_evs_ct_stats,
+       0, 0, 0,
+       doc: /* Completion-cache counters since start.  */)
+  (void)
+{
+  enca_ct_cache_stats st;
+  memset (&st, 0, sizeof st);
+  if (evs_ctcache)
+    enca_ct_cache_stats_get (evs_ctcache, &st);
+  return listn (5, make_uint (atomic_load (&ct_hits)),
+                make_uint (atomic_load (&ct_misses)),
+                make_uint (atomic_load (&ct_backend_requests)),
+                make_uint ((enca_u64) st.entries),
+                make_uint ((enca_u64) st.bytes));
+}
+
 void
 syms_of_enca_evs (void)
 {
@@ -574,11 +867,17 @@ syms_of_enca_evs (void)
   DEFSYM (Qreplaced, "replaced");
   DEFSYM (Qfolded, "folded");
   DEFSYM (Qexpired, "expired");
+  DEFSYM (Qloopback, "loopback");
+  DEFSYM (Qhit, "hit");
+  DEFSYM (Qmiss, "miss");
+  DEFSYM (Qnobackend, "nobackend");
 
   defsubr (&Senca_evs_start);
   defsubr (&Senca_evs_stop);
   defsubr (&Senca_evs_on_change);
   defsubr (&Senca_evs_on_change_delta);
+  defsubr (&Senca_evs_complete);
+  defsubr (&Senca_evs_ct_stats);
   defsubr (&Senca_evs_pump);
   defsubr (&Senca_evs_wait_committed);
   defsubr (&Senca_evs_last_commit);
