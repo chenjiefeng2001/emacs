@@ -133,7 +133,9 @@ wait_readable (enca_lsp_endpoint *ep, enca_u64 deadline_ns)
       if (now >= deadline_ns)
         return ENCA_ERR_TIMEOUT;
       enca_u64 left = deadline_ns - now;
-      long remain_ms = (long) ((left + 999999ull) / 1000000ull);\n      if (remain_ms > 60000)\n        remain_ms = 60000;
+      long remain_ms = (long) ((left + 999999ull) / 1000000ull);
+      if (remain_ms > 60000)
+        remain_ms = 60000;
       struct pollfd pfd = { ep->fd, POLLIN, 0 };
       int pr = poll (&pfd, 1, (int) remain_ms);
       if (pr > 0)

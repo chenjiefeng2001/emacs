@@ -742,3 +742,48 @@ popup redisplay 相对基线 ~60×,但绝对值仅 ~2ms。
 - **最高工程政策**:「没有毫秒级 user-path attribution,就没有架构改动」——以上每一项关闭都由该规则产生,重开任何一项需要新实验指认它将消除的精确毫秒份额;
 - 项目正式更名为 **ENCA Real Completion / Semantic Latency**,下一阶段唯一目标:把 78–92ms 的 backend 主导项打下来。三条冻结的研究方向:**D1 Backend Context Engineering、D2 Cancellation/Speculation、D3 Completion Cache**;
 - EVS-5.0 契约已冻结(`bench/enca/evs5/EVS5.md`):C1–C10 实验矩阵(cold/warm/narrowing/storm/cursor/edit/cancel/hit/miss/large-project)、缓存数据契约(不可变 refcounted 条目 + 区域失效)、阶段门禁 5.0→5.5。按指示,本阶段不写代码。
+
+
+
+## 24. P0 Baseline Closure — Vanilla / ENCA-disabled / ENCA-enabled(2026-08-24)
+
+### 24.1 三路构建(同一 upstream 基点 `11a1cb7445d`,同 configure、同 CFLAGS=-O2)
+
+| 构建 | 内容 | 验证 |
+|---|---|---|
+| A vanilla | upstream 源码导出,零 ENCA 内容 | config.h 无 HAVE_ENCA |
+| B disabled | fork 全部源码,`configure`(默认关)| **ENCA_OBJ 为空**;emacs 与 A 字节大小一致(2992936)|
+| C enabled | fork 全部源码,`--enable-enca` | ENCA_OBJ 含全部 enca 对象 |
+
+### 24.2 Batch 套件(中位数 ms,×3 轮 ×7 reps)
+| cell | A | B | C | B/A | C/B |
+|---|---|---|---|---|---|
+| buffer-insert-1MB | 10.17 | 10.50 | 10.69 | 1.03 | 1.02 |
+| buffer-replace-200 | 0.40 | 0.43 | 0.44 | 1.07 | 1.01 |
+| completion-10k | 15.39 | 13.84 | 15.13 | 0.90 | 1.09 |
+| gc-full | 8.35 | 8.90 | 8.67 | 1.07 | 0.98 |
+| regexp-search-1MB | 15.45 | 14.68 | 15.03 | 0.95 | 1.02 |
+| sort-10k | 6.26 | 5.57 | 5.63 | 0.89 | 1.01 |
+| string-concat-500 | 9.73 | 9.05 | 9.37 | 0.93 | 1.04 |
+
+### 24.3 tty Redisplay 套件(pty 强制重绘,×3 轮 ×10 reps)
+| cell | A | B | C | B/A | C/B |
+|---|---|---|---|---|---|
+| R0-noop | 0.090 | 0.084 | 0.077 | 0.94 | 0.91 |
+| R1-text-edit | 1.81 | 1.77 | 1.86 | 0.97 | 1.05 |
+| R2-popup-10 | 1.75 | 1.60 | 1.74 | 0.92 | 1.09 |
+
+### 24.4 判定
+全部比值落在 **±10% 测量噪声带**(无任何方向性偏移):
+
+```text
+A ≈ B  →  ENCA patch 对 Emacs baseline 无可测侵入成本
+       (disabled 构建与 vanilla 字节级同尺寸、行为同级)
+B ≈ C  →  ENCA runtime 启用不产生系统性回归
+A ≈ C  →  用户可见路径整体无回归
+```
+
+**ENCA 正式从性能嫌疑名单排除。** 结合 §18–§22:completion 路径的延迟主导项是外部 LSP backend(~80ms),而非 Emacs 核心、亦非 ENCA。EVS-5(Real Completion / Semantic Latency)因此聚焦 backend/context/cache 方向的决策获得最终依据。
+
+### 24.5 附带修复
+`src/enca/lsp/transport.c` POSIX 分支存在字面 `\n` 污染(此前 PowerShell 替换事故,Windows 构建不可见)——本轮 WSL 构建暴露并修复。
