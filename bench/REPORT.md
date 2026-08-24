@@ -814,3 +814,29 @@ engine 内部(hit 路径)≈0.001ms;UI 段(popup+redisplay)≈0.3–0.6ms——与 EVS-4.4 
 - collect/round_trip 现跳过 publishDiagnostics 通知帧;
 - spawn 支持额外 argv(exec_argv),fake server 改标准 LSP 逐头读取(原 bulk read 对小帧死锁);
 - 一个 getenv-vs-emacs-environ 交互段错误(原型期硬编码默认值绕开,gdb 定位)。
+
+
+
+## 26. EVS-5.3 Closure — Real Typing Workload(F1,2026-08-24)
+
+### 26.1 工作负载(tty Emacs + loopback 后端,miss 注入 90ms 思考时间)
+| 场景 | ops | exact | extend | miss | backend avoided | p50 |
+|---|---|---|---|---|---|---|
+| identifier-growth(逐字符打词)| 32 | 9 | 2 | 21 | **34.4%** | 90.3ms(miss 主导)|
+| retry(同请求重试)| 10 | 10 | 0 | 0 | **100%** | **0.074ms** |
+| edit-interleaved(编辑交错)| 12 | 0 | 0 | 12 | 0% | 90.4ms |
+
+Stage-B(同 revision 内 prefix 增长复用)落地后,增长类开始产生 extend 命中;保守失效策略下编辑交错类按设计全部 miss——**零误命中保持**。
+
+### 26.2 F2 门禁评估(§9.5)
+identifier+retry 类已进入亚毫秒;剩余 backend-bound 集中在**编辑后立即补全**的流程。cross-revision reuse 的可证明收益目标 = 把 edit-interleaved 的 0% 提升到 >50% 且 false_hit=0。该目标明确但实现风险高(需要 unrelatedness proof rule)——**F2 维持关闭**,等待真实用户数据显示该场景占比足以证明其复杂度。
+
+### 26.3 项目最终状态(F1 后)
+```text
+ENCA core (P1-P3 + wakeup + transport)   <0.1ms      FROZEN
+completion cache (strict rev + growth)   hit<1ms     Stage C GO
+real typing hit rate                     34%-100%    MEASURED
+edit-interleaved                         0%(by design)
+false hits                               0           HARD GATE
+```
+项目从"架构优化"完整转型为"语义延迟实验平台":每一层的成本、每一个杠杆的有效性、每一条边界,都有可复现实验与原始数据支撑。

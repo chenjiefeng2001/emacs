@@ -72,15 +72,15 @@ cache_lru_basics (void)
   /* model_build applies its own filter strides; capture actual sizes */
   size_t c1 = m1.count;
 
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, m1), (int) ENCA_OK);
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k2, m2), (int) ENCA_OK);
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, "ba", 2, m1), (int) ENCA_OK);
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k2, "cb", 2, m2), (int) ENCA_OK);
 
   const enca_ct_model *hit = NULL;
   /* touch k1 so k2 becomes LRU */
   CHECK (enca_ct_cache_lookup (c, &k1, &hit));
   CHECK_EQ_U64 ((int) hit->count, (int) c1);
 
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k3, m3), (int) ENCA_OK);
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k3, "dc", 2, m3), (int) ENCA_OK);
 
   /* capacity 2: k2 was evicted (LRU), k1 survived the touch */
   CHECK (!enca_ct_cache_lookup (c, &k2, &hit));
@@ -120,7 +120,7 @@ cache_lru_basics (void)
   CHECK_EQ_U64 ((int) enca_ct_model_build (3, 8, 0, 99,
                                         ENCA_CTF_EXACT, &mo),
                 (int) ENCA_OK);
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &other, mo),
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &other, "x", 1, mo),
                 (int) ENCA_OK);
   /* capacity evicted one of doc-1 entries first: reinsert k1.
      Live doc-1 entries at this point = exactly the refreshed k1. */
@@ -128,7 +128,7 @@ cache_lru_basics (void)
                                         ENCA_CTF_EXACT, &m1),
                 (int) ENCA_OK);
   c1 = m1.count;
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, m1), (int) ENCA_OK);
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, "ba", 2, m1), (int) ENCA_OK);
   CHECK_EQ_U64 ((enca_usize) enca_ct_cache_invalidate_document (c, 1),
                 (enca_usize) 1); /* only k1 belongs to doc 1 now */
   CHECK (!enca_ct_cache_lookup (c, &k1, &hit));
@@ -172,7 +172,7 @@ cache_property_no_false_hits (void)
           enca_ct_model m;
           if (enca_ct_model_build (6, 12, 0, r, ENCA_CTF_EXACT, &m)
               == ENCA_OK)
-            enca_ct_cache_insert (c, &k, m);
+            enca_ct_cache_insert (c, &k, "", 0, m);
         }
       else if (r & 2)
         {
@@ -284,7 +284,7 @@ cache_c8_budgets (void)
       if (enca_ct_model_build (200, 24, 16, i + 1, ENCA_CTF_EXACT, &m)
           != ENCA_OK)
         continue;
-      enca_ct_cache_insert (c, &k, m);
+      enca_ct_cache_insert (c, &k, "", 0, m);
     }
 
   enca_ct_cache_key probe = mkkey (2, 130, 300, ENCA_CT_MEMBER, "pr");
@@ -308,7 +308,7 @@ cache_c8_budgets (void)
       pm.items[i].label = lb;
       pm.items[i].label_len = bl + 3;
     }
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &probe, pm),
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &probe, "pr", 2, pm),
                 (int) ENCA_OK);
 
   enum { K = 2000 };
@@ -386,7 +386,7 @@ cache_invalidation_matrix (void)
       CHECK_EQ_U64 ((int) enca_ct_model_build (40, 24, 8, 71,
                                             ENCA_CTF_EXACT, &m),
                     (int) ENCA_OK);
-      CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, m),
+      CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, "", 0, m),
                     (int) ENCA_OK);
 
       const enca_ct_model *hit = NULL;
@@ -410,13 +410,13 @@ cache_invalidation_matrix (void)
       /* reseed after invalidation for the retention half */
       if (ci == 0)
         {
-          CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &other, mo),
+          CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &other, "x", 1, mo),
                         (int) ENCA_OK);
           enca_ct_model m2;
           CHECK_EQ_U64 ((int) enca_ct_model_build (30, 24, 8, 73,
                                                 ENCA_CTF_EXACT, &m2),
                         (int) ENCA_OK);
-          CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, m2),
+          CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &k1, "", 0, m2),
                         (int) ENCA_OK);
           CHECK_EQ_U64 ((enca_usize) enca_ct_cache_on_edit (c, 1),
                         (enca_usize) 1);
@@ -447,7 +447,7 @@ cache_identity_clears (void)
   CHECK_EQ_U64 ((int) enca_ct_model_build (10, 16, 0, 5,
                                         ENCA_CTF_EXACT, &m),
                 (int) ENCA_OK);
-  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &kc, m), (int) ENCA_OK);
+  CHECK_EQ_U64 ((int) enca_ct_cache_insert (c, &kc, "", 0, m), (int) ENCA_OK);
 
   /* language change => same everything else must MISS */
   enca_ct_cache_key krust = kc;

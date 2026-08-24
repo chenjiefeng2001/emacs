@@ -33,11 +33,17 @@ ctkey_hash (const enca_ct_cache_key *k)
 }
 
 static bool
-ctkey_eq (const enca_ct_cache_key *a, const enca_ct_cache_key *b)
+ctkey_eq_base (const enca_ct_cache_key *a, const enca_ct_cache_key *b)
 {
   return a->document_id == b->document_id && a->revision == b->revision
          && a->cursor == b->cursor && a->trigger == b->trigger
-         && a->prefix_hash == b->prefix_hash && a->lang_hash == b->lang_hash;
+         && a->lang_hash == b->lang_hash;
+}
+
+static bool
+ctkey_eq (const enca_ct_cache_key *a, const enca_ct_cache_key *b)
+{
+  return ctkey_eq_base (a, b) && a->prefix_hash == b->prefix_hash;
 }
 
 /* ---------------- entry ---------------- */
@@ -48,6 +54,8 @@ typedef struct ct_entry
   struct ct_entry *hash_next;
   enca_ct_cache_key key;
   enca_u64 hash;
+  char *prefix;                 /* owned copy of the request prefix  */
+  size_t prefix_len;
   enca_ct_model model;          /* immutable once inserted           */
 } ct_entry;
 
@@ -91,6 +99,7 @@ entry_payload_free (ct_entry *e)
       enca_free (e->model.items[i].annot);
     }
   enca_free (e->model.items);
+  enca_free (e->prefix);
 }
 
 static void
@@ -199,6 +208,7 @@ enca_ct_cache_invalidate_document (enca_ct_cache *c,
 
 enca_result
 enca_ct_cache_insert (enca_ct_cache *c, const enca_ct_cache_key *key,
+                      const char *prefix, size_t prefix_len,
                       enca_ct_model m)
 {
   if (!c || !key)
@@ -240,6 +250,19 @@ enca_ct_cache_insert (enca_ct_cache *c, const enca_ct_cache_key *key,
   e->key = *key;
   e->hash = h;
   e->model = m;
+  if (prefix_len)
+    {
+      e->prefix = enca_malloc (prefix_len + 1);
+      if (!e->prefix)
+        {
+          entry_payload_free (e);
+          enca_free (e);
+          return ENCA_ERR_OUT_OF_MEMORY;
+        }
+      memcpy (e->prefix, prefix, prefix_len);
+      e->prefix[prefix_len] = 0;
+      e->prefix_len = prefix_len;
+    }
   size_t slot = h % c->bucket_count;
   e->hash_next = c->buckets[slot];
   c->buckets[slot] = e;
@@ -275,6 +298,44 @@ enca_ct_cache_lookup (enca_ct_cache *c, const enca_ct_cache_key *key,
   return false;
 }
 
+/* Stage-B growth: longest stored prefix that is a strict prefix of
+   the requested bytes, with every other key field exact. */
+bool
+enca_ct_cache_lookup_grow (enca_ct_cache *c, const enca_ct_cache_key *k,
+                           const char *prefix, size_t prefix_len,
+                           const enca_ct_model **out,
+                           size_t *out_entry_prefix_len)
+{
+  if (!c || !k || !out || !prefix || prefix_len == 0)
+    return false;
+
+  /* linear scan is fine: entries are bounded (prototype max 64) */
+  ct_entry *best = NULL;
+  for (size_t slot = 0; slot < c->bucket_count; slot++)
+    for (ct_entry *e = c->buckets[slot]; e; e = e->hash_next)
+      {
+        if (!ctkey_eq_base (&e->key, k))
+          continue;
+        if (e->prefix_len >= prefix_len)
+          continue;             /* strict prefix only */
+        if (memcmp (e->prefix, prefix, e->prefix_len) != 0)
+          continue;             /* not a prefix of the request */
+        if (!best || e->prefix_len > best->prefix_len)
+          best = e;
+      }
+  if (!best)
+    {
+      c->st.misses++;
+      return false;
+    }
+  c->st.grow_hits++;
+  lru_unlink (c, best);
+  lru_push_mru (c, best);
+  *out = &best->model;
+  *out_entry_prefix_len = best->prefix_len;
+  return true;
+}
+
 void
 enca_ct_cache_stats_get (const enca_ct_cache *c,
                          enca_ct_cache_stats *out)
@@ -286,8 +347,6 @@ enca_ct_cache_stats_get (const enca_ct_cache *c,
   else
     memset (out, 0, sizeof *out);
 }
-
-/* ---------------- canonical hash helpers ---------------- */
 
 enca_u64
 enca_ct_cache_prefix_hash (const char *prefix, size_t len)

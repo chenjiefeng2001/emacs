@@ -71,6 +71,20 @@ static enca_result handshake (enca_lsp_session *s, const char *root_uri);
 static enca_result drain_echo_if_loopback (enca_lsp_session *s,
                                      enca_result send_r);
 
+/* Simulated think-time helper (cross-platform). */
+static void
+lsp_delay_ms (unsigned ms)
+{
+#ifdef _WIN32
+  Sleep (ms);
+#else
+  struct timespec ts;
+  ts.tv_sec = ms / 1000;
+  ts.tv_nsec = (long) (ms % 1000) * 1000000L;
+  nanosleep (&ts, NULL);
+#endif
+}
+
 /* ---------------- process spawn (clangd arm) ---------------- */
 
 static enca_result
@@ -593,10 +607,7 @@ round_trip (enca_lsp_session *s, const char *payload, size_t len,
      path pays realistic backend cost. */
   if (s->mode == ENCA_LSP_LOOPBACK && s->backend_delay_ms)
     {
-      struct timespec ts;
-      ts.tv_sec = (time_t) (s->backend_delay_ms / 1000);
-      ts.tv_nsec = (long) (s->backend_delay_ms % 1000) * 1000000L;
-      nanosleep (&ts, NULL);
+      lsp_delay_ms (s->backend_delay_ms);
     }
 
   /* Skip server notifications until the frame carrying EXPECT_ID
@@ -806,10 +817,7 @@ enca_lsp_collect_response (enca_lsp_session *s, enca_u64 expect_id,
      read so MISS-arm attribution includes realistic backend cost. */
   if (s->mode == ENCA_LSP_LOOPBACK && s->backend_delay_ms)
     {
-      struct timespec ts;
-      ts.tv_sec = (time_t) (s->backend_delay_ms / 1000);
-      ts.tv_nsec = (long) (s->backend_delay_ms % 1000) * 1000000L;
-      nanosleep (&ts, NULL);
+      lsp_delay_ms (s->backend_delay_ms);
     }
 #ifdef LSP_DEBUG_DELAY
   else

@@ -182,3 +182,81 @@ Verdict: the cache converts the ~80ms backend term into sub-millisecond
 visible latency for repeat workloads -- the first two-orders-of-
 magnitude user-path win in the project.  Novel-prefix misses remain
 backend-bound (~90ms), which is exactly the shape modern IDEs have.
+
+## 9. EVS-5.3 -- Real Typing Workload Closure (F1, frozen 2026-08-24)
+
+### 9.1 Question
+
+> In a realistic editing session, what fraction of completion requests
+> can the cache safely serve without a backend round trip?
+
+### 9.2 Stage-B completion (within-revision prefix growth) ¡ª rule frozen
+
+Real typing GROWS prefixes: p -> pr -> pri.  With exact-prefix keys
+every keystroke would miss, making F1 meaningless.  Therefore the
+Stage-B reuse rule (frozen in section 2 but not yet implemented)
+lands NOW, still inside one revision:
+
+```
+HIT(extend) requires ALL of:
+  same document_id AND revision AND cursor AND trigger AND lang_hash
+  AND entry.prefix is a strict prefix of requested prefix
+=> serve enca_ct_filter_prefix(entry.model, requested prefix)
+   [server-side prefix completion guarantees the superset property]
+Else MISS -> backend.
+```
+
+Selection among candidates: LONGEST entry.prefix wins.
+Everything else (cross-revision, cross-cursor, semantic identity)
+remains Stage D / unapproved.
+
+### 9.3 Workload (deterministic, seeded)
+
+Identifier typing over a vocabulary with realistic repetition:
+words typed char-by-char at fixed anchors; member-access bursts;
+retry; interleaved edits that bump revision and invalidate.
+
+Vocabulary hit sources in real sessions: repeats of the SAME word at
+the SAME anchor (retry/refresh), and prefix growth of the CURRENT
+word.  Novel words + moved cursors = honest misses.
+
+### 9.4 Metrics (per user-path KPI)
+
+completion_requests / exact_hits / extend_hits / misses /
+backend_requests / backend_avoided_ratio / invalidated /
+keypress->visible p50/p95/p99/max per op class (hit-extend,
+hit-exact, miss) / false_hits (must be 0; grow path verified against
+brute-force superset oracle in native tests).
+
+### 9.5 F2 gate (cross-revision Stage D)
+
+F2 starts ONLY if real-typing data shows: backend_avoided_ratio
+< 50% while p95 > 10ms, i.e. users still wait on the backend for a
+majority of completions.  Otherwise F2 stays closed as complexity
+without payoff.
+
+## 10. F1 Outcome -- real typing workload (2026-08-24)
+
+Raw: bench/results/evs53_real_typing.log (loopback backend,
+EVS_BACKEND_DELAY_MS=90 simulated server think-time on misses).
+
+| cell | ops | exact | extend | miss | avoided | p50 |
+|---|---|---|---|---|---|---|
+| identifier-growth | 32 | 9 | 2 | 21 | **34.4%** | 90.3ms(miss-dominated) |
+| retry | 10 | 10 | 0 | 0 | **100%** | **0.074ms** |
+| edit-interleaved | 12 | 0 | 0 | 12 | 0% | 90.4ms |
+
+Reading:
+- Retry/reselect class is PERFECT: 100% served at 74us.
+- Prefix-growth typing avoids a third of backend calls via exact
+  repeats + the first Stage-B extend hits.
+- Edit-interleaved stays 0% by DESIGN (conservative whole-document
+  invalidation); making edits retain entries is exactly what Stage D
+  would need to prove, and it now has a measurable target: turning
+  this 0% into >50% without a single false hit.
+
+Stage-D gate (section 9.5) evaluation: identifier+retry classes are
+already fast; the remaining backend-bound class is edit-heavy flows,
+where cross-revision reuse would have to operate.  Data recorded;
+Stage D remains CLOSED pending a contract amendment with an
+unrelatedness proof rule.

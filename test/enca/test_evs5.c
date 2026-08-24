@@ -470,7 +470,7 @@ evs54_dual_path_oracle (void)
           m.items[i].annot = NULL;
           m.bytes += fll[i] + 1;
         }
-      CHECK_EQ_U64 ((int) enca_ct_cache_insert (cache, &key, m),
+      CHECK_EQ_U64 ((int) enca_ct_cache_insert (cache, &key, "", 0, m),
                     (int) ENCA_OK);
 
       /* HIT must reproduce exactly the fresh label set */
@@ -593,7 +593,7 @@ evs54_mixed_workload (void)
               m.items[q].annot = NULL;
               m.bytes += fll[q] + 1;
             }
-          enca_ct_cache_insert (cache, &k, m);
+          enca_ct_cache_insert (cache, &k, "", 0, m);
         }
       enca_u64 t1 = enca_monotonic_now_ns ();
       lats[nl++] = (double) (t1 - t0) / 1e6;

@@ -271,7 +271,7 @@ evs_ct_exec (const enca_sched_task *t, enca_u64 *out)
               m.items[i].annot_len = 0;
               m.bytes += lens[i] + 1;
             }
-          enca_ct_cache_insert (evs_ctcache, &key, m);
+          enca_ct_cache_insert (evs_ctcache, &key, ct_req.prefix, strlen (ct_req.prefix), m);
         }
       else
         source = 2;             /* backend failed                   */
@@ -769,6 +769,26 @@ DEFUN ("enca-evs-latency", Fenca_evs_latency, Senca_evs_latency, 1, 1, 0,
 
 /* ---------------- EVS-5.2.6: elisp completion entry ---------------- */
 
+/* Simulated edit: publish a tiny snapshot so the document revision
+   advances (invariant 2.1) and the conservative cache policy can be
+   exercised from elisp workloads. */
+DEFUN ("enca-evs-bump-revision", Fenca_evs_bump_revision,
+       Senca_evs_bump_revision, 0, 0, 0,
+       doc: /* Publish a minimal snapshot, advancing the revision.
+Returns the new revision.  */)
+  (void)
+{
+  if (!evs_active)
+    error ("EVS not active");
+  enca_capture_input in = { ENCA_ENC_UTF8, "x", 1 };
+  enca_document_snapshot *snap = NULL;
+  if (enca_snapshot_publish (&evs_sys, evs_doc, &in, 1, &snap) != ENCA_OK)
+    error ("EVS: bump publish failed");
+  enca_u64 rev = snap->epoch.document_revision;
+  enca_snapshot_release (snap);   /* doc->latest holds its own ref */
+  return make_uint (rev);
+}
+
 DEFUN ("enca-evs-complete", Fenca_evs_complete, Senca_evs_complete,
        1, 2, 0,
        doc: /* Run one completion through cache/backend for PREFIX.
@@ -878,6 +898,7 @@ syms_of_enca_evs (void)
   defsubr (&Senca_evs_on_change_delta);
   defsubr (&Senca_evs_complete);
   defsubr (&Senca_evs_ct_stats);
+  defsubr (&Senca_evs_bump_revision);
   defsubr (&Senca_evs_pump);
   defsubr (&Senca_evs_wait_committed);
   defsubr (&Senca_evs_last_commit);

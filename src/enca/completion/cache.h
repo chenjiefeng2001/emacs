@@ -45,6 +45,7 @@ typedef struct
   enca_u64 misses;
   enca_u64 evictions;
   enca_u64 invalidations;
+  enca_u64 grow_hits;
   enca_usize entries;
   enca_usize bytes;
 } enca_ct_cache_stats;
@@ -53,10 +54,13 @@ enca_result enca_ct_cache_create (size_t max_entries,
                                   enca_ct_cache **out);
 void enca_ct_cache_destroy (enca_ct_cache *c);
 
-/* Insert takes ownership of M (it becomes the entry payload).  On
-   duplicate key the old entry is replaced (counted as eviction). */
+/* Insert takes ownership of M (it becomes the entry payload) and of
+   an owned copy of PREFIX/PREFIX_LEN (Stage-B growth needs the bytes
+   to prove superset relations later).  On duplicate key the old entry
+   is replaced (counted as eviction). */
 enca_result enca_ct_cache_insert (enca_ct_cache *c,
                                   const enca_ct_cache_key *key,
+                                  const char *prefix, size_t prefix_len,
                                   enca_ct_model m);
 
 /* Exact-key lookup.  On hit, promotes to MRU and returns a BORROWED
@@ -69,6 +73,18 @@ bool enca_ct_cache_lookup (enca_ct_cache *c,
    closed).  Returns number removed. */
 enca_usize enca_ct_cache_invalidate_document (enca_ct_cache *c,
                                               enca_object_id document_id);
+
+/* Stage-B within-revision prefix growth: find an entry matching all
+   key fields EXCEPT prefix, whose stored prefix is a strict prefix of
+   K's prefix bytes; promote and return its model plus the stored
+   prefix length (caller filters model labels by the full requested
+   prefix via enca_ct_filter_prefix).  Longest stored prefix wins.
+   False-hit safety: every other field is compared exactly. */
+bool enca_ct_cache_lookup_grow (enca_ct_cache *c,
+                                const enca_ct_cache_key *k,
+                                const char *prefix, size_t prefix_len,
+                                const enca_ct_model **out,
+                                size_t *out_entry_prefix_len);
 
 void enca_ct_cache_clear (enca_ct_cache *c);
 
