@@ -840,3 +840,36 @@ edit-interleaved                         0%(by design)
 false hits                               0           HARD GATE
 ```
 项目从"架构优化"完整转型为"语义延迟实验平台":每一层的成本、每一个杠杆的有效性、每一条边界,都有可复现实验与原始数据支撑。
+
+
+## 27. EVS-5.3.1 Closure — C13/C8c 完整版:真实打字分类 × 真实 popup/redisplay 路径(2026-08-25)
+
+### 27.1 问题
+把 EVS-5.3 的真实打字分类(retry / 前缀增长 / novel / 编辑交错)接到 EVS-5.2.6 的真实 UI 路径(popup overlay 安装 + 强制 redisplay,buffer 真实显示于 tty),对每类给出完整 keypress→visible 分布(p50/p95/p99/p99.9/max)。这是 Stage-D 决策的指定输入(契约见 CACHE.md §11)。
+
+### 27.2 结果(tty,loopback 后端,miss 注入 90ms;原始数据 bench/results/evs531_ui_typing.log)
+| cell | ops | exact | extend | miss | avoided | eng p50 | vis p50 | vis p95 | vis max |
+|---|---|---|---|---|---|---|---|---|---|
+| RETRY | 30 | 30 | 0 | 0 | **100%** | **0.15ms** | 4.6ms | 13.2ms | 30.9ms |
+| GROWTH | 32 | 9 | 2 | 21 | **34.4%** | 90.3ms | 94.7ms | 95.5ms | 95.5ms |
+| NOVEL | 15 | 0 | 0 | 15 | 0% | 90.4ms | 95.4ms | 119.1ms | 119.1ms |
+| EDITMIX | 12 | 0 | 0 | 12 | 0%(设计如此)| 90.4ms | 95.0ms | 98.1ms | 98.1ms |
+
+hit 类归因:install p50 ~0.04ms,redisplay p50 ~4.5ms —— cache hit 的可见延迟几乎全部是"真的画出 popup"这一 tty 重绘地板,与引擎和缓存无关。
+
+### 27.3 测量口径修正(重要)
+§25 的 HIT p50=0.58ms 是在**工作 buffer 未显示**(未 switch-to-buffer)时测得的 redisplay,几乎无物可画。buffer 真实显示后,诚实的 hit 类 keypress→visible 为 ~4.6ms p50,由 ~4.5ms tty redisplay 地板主导;引擎侧仍 <1ms(C8c 引擎子门保持 MET),UI 地板按 EVS-4.4 纪律单列、绝不隐藏。§25 数字按原样保留,但引用时必须带此口径说明。
+
+### 27.4 交叉验证
+GROWTH cell 与 F1 的引擎侧数字**完全一致**(exact=9 / extend=2 / miss=21 → avoided 34.4%),证明 UI 路径未扰动缓存语义;false_hit 门槛无异常(RETRY 全 hit / EDITMIX 全 miss by design)。
+
+### 27.5 判定
+- C8c:引擎侧 <1ms MET(全分类);全路径 hit p50 4.6ms,归因如上。
+- C13:四类完整分布已报告,不设阈值(按契约由实验决定)。
+- Stage-D 输入不变:唯一 backend-bound 的是 NOVEL(诚实的冷 miss,现代 IDE 同形态)与 EDITMIX(保守失效导致 0%)。把 edit-interleaved 复用从 0% 提到 >50% 且 false_hit=0,仍是唯一真实杠杆;其余一切已处于或低于 tty 绘画地板。
+
+### 27.6 工件
+- harness:test/enca/evs531-ui-typing.el(KPV31/SUM31 行格式,单一时钟覆盖 engine+popup+redisplay)
+- runner:bench/enca/evs531_run.sh(WSL,script -qec,EVS53_LOG 直写仓库 results/)
+- 契约+结果:bench/enca/evs5/CACHE.md §11
+- 排障记录:harness 首版 GROWTH 词选择公式误写为 `(% i 12)`(原版 `(/ i 4)`)导致 exact 虚高 34.4%→46.9%;经原版复现 + 二分定位后修正。

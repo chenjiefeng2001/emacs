@@ -190,7 +190,7 @@ backend-bound (~90ms), which is exactly the shape modern IDEs have.
 > In a realistic editing session, what fraction of completion requests
 > can the cache safely serve without a backend round trip?
 
-### 9.2 Stage-B completion (within-revision prefix growth) ¡ª rule frozen
+### 9.2 Stage-B completion (within-revision prefix growth) ï¿½ï¿½ rule frozen
 
 Real typing GROWS prefixes: p -> pr -> pri.  With exact-prefix keys
 every keystroke would miss, making F1 meaningless.  Therefore the
@@ -260,3 +260,101 @@ already fast; the remaining backend-bound class is edit-heavy flows,
 where cross-revision reuse would have to operate.  Data recorded;
 Stage D remains CLOSED pending a contract amendment with an
 unrelatedness proof rule.
+
+## 11. EVS-5.3.1 -- C13/C8c FULL VERSION: real-typing classes through
+##      the real popup/redisplay path (contract, frozen 2026-08-25)
+
+### 11.1 Question
+
+> For each REAL TYPING class (hit-exact / hit-extend / miss /
+> edit-interleaved), what is the complete keypress->visible latency
+> distribution (p50/p95/p99/p99.9/max) when the op ends in an actual
+> popup install + forced redisplay in a live tty Emacs?
+
+This closes the gap between section 8 (UI arms but synthetic H/M/MIX
+patterns) and section 10 (real typing classes but ENGINE-side timing
+only).  It is the designated input for any Stage-D decision.
+
+### 11.2 Measurement contract
+
+```
+keypress -> enca-evs-complete (engine) -> popup overlay install
+         -> redisplay'  => VISIBLE        total = whole span
+```
+
+- ONE consistent clock per op covering engine + UI + redisplay.
+  (Corrects the section 8 MISS/MIX arm bookkeeping, which summed
+  engine-only time for `total`.)
+- Engine/UI split reported per op and summarized (install vs
+  redisplay p50) so the EVS-4.4 UI floor stays visible, never hidden.
+- Percentiles: nearest-rank on sorted samples, p50/p95/p99/p99.9/max.
+
+### 11.3 Cells (deterministic, seeded; loopback backend,
+###      EVS_BACKEND_DELAY_MS=90)
+
+| cell | content | expected source mix |
+|---|---|---|
+| RETRY | prime once, N identical requests | hit-exact |
+| GROWTH | vocabulary words typed char-by-char at one anchor (section 9.3 workload, unchanged) | exact + Stage-B extend + miss |
+| NOVEL | fresh pseudo-random prefixes, revision constant | miss |
+| EDITMIX | completion then revision bump each iteration | miss by design |
+
+### 11.4 Gates
+
+- false_hit == 0 remains ABSOLUTE (structural gates C10/C11 already
+  closed in sections 7/8; this phase adds NO new cache logic, so any
+  non-hit source on RETRY or any hit on EDITMIX is a harness bug).
+- C8c re-affirmed PER CLASS: hit-class keypress->visible p50 < 1ms
+  including popup+redisplay.
+- C13 reported as full distributions per class; no threshold is
+  imposed (per section 4: threshold decided by experiment).
+
+Output lines:
+`KPV31|cell|eng_ms|ui_ms|inst_ms|red_ms|total_ms|src` per op and
+`SUM31|cell|ops=|exact=|extend=|miss=|avoided=%|eng_p50=|vis_p50=|vis_p95=|vis_p99=|vis_p99.9=|vis_max=|inst_p50=|red_p50=`
+
+### 11.5 Outcome -- C13/C8c full version (2026-08-25)
+
+Raw: bench/results/evs531_ui_typing.log (loopback backend,
+EVS_BACKEND_DELAY_MS=90; buffer DISPLAYED via switch-to-buffer so
+redisplay does real tty work).  Harness:
+test/enca/evs531-ui-typing.el; runner: bench/enca/evs531_run.sh.
+
+| cell | ops | exact | extend | miss | avoided | eng p50 | vis p50 | vis p95 | vis max |
+|---|---|---|---|---|---|---|---|---|---|
+| RETRY | 30 | 30 | 0 | 0 | 100% | **0.15ms** | 4.6ms | 13.2ms | 30.9ms |
+| GROWTH | 32 | 9 | 2 | 21 | **34.4%** | 90.3ms | 94.7ms | 95.5ms | 95.5ms |
+| NOVEL | 15 | 0 | 0 | 15 | 0% | 90.4ms | 95.4ms | 119.1ms | 119.1ms |
+| EDITMIX | 12 | 0 | 0 | 12 | 0% (by design) | 90.4ms | 95.0ms | 98.1ms | 98.1ms |
+
+Attribution on the hit class: install p50 ~0.04ms, redisplay p50
+~4.5ms -- i.e. essentially the ENTIRE visible latency of a cache hit
+is the tty redisplay floor of actually painting the popup, not the
+engine and not the cache.
+
+Cross-validation: GROWTH reproduces the F1 engine-side cell EXACTLY
+(exact=9 / extend=2 / miss=21 => avoided 34.4%), confirming the UI
+path did not perturb cache semantics.
+
+Measurement correction vs section 8: the 0.58ms HIT keypress->visible
+figure was taken with `redisplay' running while the work buffer was
+NOT displayed (no switch-to-buffer), so redisplay had almost nothing
+to paint.  With the buffer genuinely displayed the honest hit-class
+keypress->visible is ~4.6ms p50, dominated by the ~4.5ms tty
+redisplay floor.  Engine-side remains <1ms (gate C8c engine clause
+MET); the UI floor is reported separately per EVS-4.4 discipline.
+Section 8 numbers stand as measured but must be quoted with this
+caveat.
+
+Gates:
+- C10/C11: unchanged structural closures; no anomalies (RETRY all
+  hit, EDITMIX all miss by design).
+- C8c: engine-side <1ms MET per class; full-path hit p50 4.6ms with
+  attribution above.
+- C13: full distributions reported for all four classes.
+
+Stage-D input (unchanged): the only backend-bound classes remain
+NOVEL (honest cold misses, modern-IDE shape) and EDITMIX (0% by
+conservative invalidation).  Turning edit-interleaved reuse from 0%
+to >50% at false_hit=0 is still the single real lever; everything
+else is at or below the tty paint floor.

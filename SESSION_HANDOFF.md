@@ -53,6 +53,7 @@ Vanilla ≡ ENCA-disabled ≡ ENCA-enabled(所有 cell 比值 0.89–1.09,
 | EVS-5.2 Stage A+B+C cache | false_hits=0,C8a=0.10µs,C8b=0.40µs | CACHE.md §7-8 |
 | EVS-5.2.6 real UI | **HIT keypress→visible p50=0.58ms** / MISS 90.4ms | CACHE.md §8,REPORT §25 |
 | **EVS-5.3 real typing (F1)** | retry 100% / growth avoided 34.4% / edit-interleaved 0%(by design)/ false_hits=0 | REPORT §26,results/evs53_real_typing.log |
+| **EVS-5.3.1 C13/C8c full** | 四类完整分布落地;hit 全路径 p50=4.6ms(redisplay 地板 ~4.5ms 主导,引擎 <0.15ms);§25 的 0.58ms 口径已修正 | CACHE.md §11,REPORT §27,results/evs531_ui_typing.log |
 
 ---
 
@@ -99,10 +100,11 @@ GUI renderer、Range Snapshot、tree-sitter、cross-revision reuse
 - 先写契约修订(CACHE.md §2 扩展),再实现
 - 绝对门禁不变:false_hit = 0
 
-### 候选 2 — C13/C8c 完整版
-把 evs53-typing.el 的引擎侧数字接到 evs52-ui 的 popup/redisplay,
-给出 hit/miss/edit 三类各自的完整 keypress→visible 分布
-(p50/p95/p99/p99.9)。工作量小(~1 天),是 Stage D 决策的输入。
+### 候选 2 — C13/C8c 完整版 ✅ 已完成(2026-08-25,EVS-5.3.1)
+真实打字四类 × 真实 popup/redisplay 全分布已落地(CACHE.md §11 /
+REPORT §27)。关键新事实:hit 类 keypress→visible p50=4.6ms,几乎
+全是 tty redisplay 地板(引擎侧 <0.15ms);§25 的 0.58ms 是 buffer
+未显示时的口径,引用需带修正说明。Stage-D 决策输入已就绪。
 
 ### 候选 3 — 真实 LSP 替换 fake server
 WSL 无 clangd;Windows 侧 clangd 19.1 可用但 emacs 构建在 WSL。
@@ -159,3 +161,7 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > 所有内部路径都已证明无罪并被冻结;唯一真实的杠杆是把
 > edit-interleaved 的 0% 复用率提上去且永不返回错误候选——
 > 在拿到真实用户场景占比数据之前,克制就是最好的工程。
+>
+> (2026-08-25 补:EVS-5.3.1 已给出全分布;hit 类可见延迟已触到
+> tty 绘画地板,缓存与引擎侧再无毫秒可榨。Stage-D 仍按 §5 候选 1
+> 的前置条件保持关闭。)
