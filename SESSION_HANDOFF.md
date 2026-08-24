@@ -54,6 +54,7 @@ Vanilla ≡ ENCA-disabled ≡ ENCA-enabled(所有 cell 比值 0.89–1.09,
 | EVS-5.2.6 real UI | **HIT keypress→visible p50=0.58ms** / MISS 90.4ms | CACHE.md §8,REPORT §25 |
 | **EVS-5.3 real typing (F1)** | retry 100% / growth avoided 34.4% / edit-interleaved 0%(by design)/ false_hits=0 | REPORT §26,results/evs53_real_typing.log |
 | **EVS-5.3.1 C13/C8c full** | 四类完整分布落地;hit 全路径 p50=4.6ms(redisplay 地板 ~4.5ms 主导,引擎 <0.15ms);§25 的 0.58ms 口径已修正 | CACHE.md §11,REPORT §27,results/evs531_ui_typing.log |
+| **EVS-5.4 real LSP** | 真 clangd 18.1.3 打通 elisp 用户路径;引擎 source 序列与 loopback 逐 op 一致(32/32);GROWTH 精确复现 F1;false_hit=0 | REAL_LSP.md §6,REPORT §28,results/evs54_real_lsp.log |
 
 ---
 
@@ -106,10 +107,13 @@ REPORT §27)。关键新事实:hit 类 keypress→visible p50=4.6ms,几乎
 全是 tty redisplay 地板(引擎侧 <0.15ms);§25 的 0.58ms 是 buffer
 未显示时的口径,引用需带修正说明。Stage-D 决策输入已就绪。
 
-### 候选 3 — 真实 LSP 替换 fake server
-WSL 无 clangd;Windows 侧 clangd 19.1 可用但 emacs 构建在 WSL。
-若要在 WSL 打通真 clangd:`apt install clangd` 或用 Windows clangd
-经管道桥接(未验证)。fake_lsp.py 已支持 FAKE_DELAY_MS/FAKE_ITEMS。
+### 候选 3 — 真实 LSP 替换 fake server ✅ 已完成(2026-08-25,EVS-5.4)
+WSL `apt install clangd` 即可(Ubuntu 18.1.3,免密 root)。enca-evs-start
+已支持字符串 BACKEND 直 spawn 真 server;`enca-evs-lsp-sync` 推文档状态
+(version==revision)。关键结论:后端替换对缓存层透明(source 序列逐 op
+一致);合成小文档下真 miss 仅 ~5ms,但**真实项目仍以 §21 的 78–92ms 为
+准**,后端主导性结论不变。顺带修复两个潜伏缺陷(帧边界丢失 + 缺原型),
+详见 REAL_LSP.md §6.1 / REPORT §28.5。
 
 ### 明确不做
 继续优化 runtime/scheduler/snapshot/transport;为命中率堆缓存
@@ -135,6 +139,15 @@ WSL 无 clangd;Windows 侧 clangd 19.1 可用但 emacs 构建在 WSL。
   TSan(WSL gcc)0 warnings——回归门槛不得低于此。
 - **TSan 脚本**:`bench/enca/evs23_tsan.sh`(gcc -std=gnu2x,
   含全部模块)。
+- **WSL clangd/valgrind 已装**(apt,root 免密):clangd 18.1.3。
+  B2 原生测试臂现会真跑,套件总时长变长属正常。
+- **构建树单对象重编**:必须 `make -C src enca-evs.o`;在 ~/enca-p11
+  根目录裸 `make src/enca-evs.o` 会走内建规则、缺 include 路径而失败
+  (静默 `|| true` 会让人误读产物)。
+- **新头文件纪律**:enca-evs.c 曾因缺 memory.h/jsonrpc.h 触发隐式
+  int 声明(-Wimplicit-function-declaration 只警告不报错,-O2 下碰巧
+  无害)。新增对 enca 内存/JSON API 的调用前先补显式 include,并
+  `grep 'implicit declaration' build.log` 应为 0。
 
 ---
 
@@ -165,3 +178,8 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > (2026-08-25 补:EVS-5.3.1 已给出全分布;hit 类可见延迟已触到
 > tty 绘画地板,缓存与引擎侧再无毫秒可榨。Stage-D 仍按 §5 候选 1
 > 的前置条件保持关闭。)
+>
+> (2026-08-25 再补:EVS-5.4 用真 clangd 走通全路径并证明缓存语义
+> 对后端替换完全透明;真实项目后端主导性不变。下一优先级仍是
+> §5 候选 1 的前置条件——拿到真实用户 edit-after-completion 占比
+> 数据之前,不做 Stage-D。)

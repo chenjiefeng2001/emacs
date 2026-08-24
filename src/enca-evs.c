@@ -49,7 +49,14 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "enca/completion/completion.h"
 #include "enca/completion/cache.h"
 #include "enca/lsp/lsp.h"
+#include "enca/lsp/jsonrpc.h"
 #include "enca/id/id.h"
+/* Allocator prototypes: without this, C99 implicit-int rules made
+   every enca_malloc/enca_free call site truncate the returned pointer
+   through EAX (sign-extended), corrupting heap results -- latent
+   until the clangd arm's first worker-thread allocation landed in an
+   arena whose low-32 had bit 31 set (crash, not silent). */
+#include "enca/memory/memory.h"
 
 #include <stdio.h>
 
@@ -92,6 +99,12 @@ static bool evs_have_wake;
 static enca_ct_cache *evs_ctcache;      /* non-NULL => armed       */
 static enca_lsp_session *evs_lsp;       /* non-NULL => backend     */
 static char evs_lsp_uri[64];
+/* EVS-5.4: real-server arm (EVS5 REAL_LSP.md).  PATH is a private
+   copy so the Lisp string's lifetime never matters; OPENED tracks
+   didOpen-vs-didChange for enca-evs-lsp-sync. */
+static char evs_lsp_path[512];
+static bool evs_lsp_is_clangd;
+static bool evs_lsp_opened;
 
 /* Single-flight request slot.  The elisp caller blocks until its op
    completes, so ops are naturally serialized on the main thread. */
@@ -274,12 +287,16 @@ evs_ct_exec (const enca_sched_task *t, enca_u64 *out)
           enca_ct_cache_insert (evs_ctcache, &key, ct_req.prefix, strlen (ct_req.prefix), m);
         }
       else
-        source = 2;             /* backend failed                   */
-        atomic_fetch_add (&ct_misses, 1);
+        {
+          source = 2;           /* backend failed                   */
+          atomic_fetch_add (&ct_misses, 1);
+        }
     }
   else
-    source = 2;                 /* no backend configured            */
-    atomic_fetch_add (&ct_misses, 1);
+    {
+      source = 2;               /* no backend configured            */
+      atomic_fetch_add (&ct_misses, 1);
+    }
 
   const double engine_ms
     = (double) (enca_monotonic_now_ns () - t0) / 1e6;
@@ -357,6 +374,8 @@ evs_stop_internal (void)
   evs_ctcache = NULL;
   enca_lsp_session_destroy (evs_lsp);
   evs_lsp = NULL;
+  evs_lsp_is_clangd = false;
+  evs_lsp_opened = false;
   if (evs_have_wake)
     {
       /* No waiters exist once the scheduler is joined (contract). */
@@ -402,34 +421,55 @@ Returns the number of workers actually started.  */)
     error ("EVS: document state create failed");
   if (!NILP (backend))
     {
-      /* Completion arm: cache always; LOOPBACK session provides the
-         transport.  Simulated backend think-time comes from the
-         EVS_BACKEND_DELAY_MS env (default 90) so MISS arms carry a
-         realistic cost without spawning fragile child processes. */
+      /* Completion arm: cache always; the backend provides candidates
+         on miss.  `loopback keeps the simulated think-time arm (90ms,
+         loopback-only by construction); a STRING backend is a real
+         LSP server path => ENCA_LSP_CLANGD with NO injected delay
+         (EVS-5.4, bench/enca/evs5/REAL_LSP.md). */
       if (enca_ct_cache_create (64, &evs_ctcache) != ENCA_OK)
         error ("EVS: completion cache create failed");
       fprintf (stderr, "[dbg] cache ok\n");
-      {
-        enca_lsp_session_opts lo;
-        memset (&lo, 0, sizeof lo);
-        enca_result lr = enca_lsp_session_create (ENCA_LSP_LOOPBACK,
-                                                  &lo, &evs_lsp);
-        fprintf (stderr, "[dbg] lsp create=%d s=%p\n", (int) lr,
-                 (void *) evs_lsp);
-        if (lr != ENCA_OK)
-          error ("EVS: loopback session failed");
-        snprintf (evs_lsp_uri, sizeof evs_lsp_uri,
-                  "file:///evs-loopback.c");
+      if (STRINGP (backend))
         {
-          /* Prototype: fixed simulated think-time.  (An env-var
-             override tripped a getenv-vs-emacs-environ interaction
-             under this build; revisit only with evidence.) */
-          unsigned ms = 90u;
-          fprintf (stderr, "[dbg] pre-set delay=%u\n", ms);
-          enca_lsp_set_backend_delay_ms (evs_lsp, ms);
-          fprintf (stderr, "[dbg] post-set\n");
+          enca_lsp_session_opts lo;
+          memset (&lo, 0, sizeof lo);
+          snprintf (evs_lsp_path, sizeof evs_lsp_path, "%s",
+                    SSDATA (backend));
+          lo.clangd_path = evs_lsp_path;
+          lo.root_uri = NULL;
+          enca_result lr
+            = enca_lsp_session_create (ENCA_LSP_CLANGD, &lo, &evs_lsp);
+          fprintf (stderr, "[dbg] clangd create=%d s=%p\n", (int) lr,
+                   (void *) evs_lsp);
+          if (lr != ENCA_OK)
+            error ("EVS: real LSP session failed (%s)", evs_lsp_path);
+          snprintf (evs_lsp_uri, sizeof evs_lsp_uri,
+                    "file:///enca-evs-live.c");
+          evs_lsp_is_clangd = true;
+          evs_lsp_opened = false;
         }
-      }
+      else
+        {
+          enca_lsp_session_opts lo;
+          memset (&lo, 0, sizeof lo);
+          enca_result lr = enca_lsp_session_create (ENCA_LSP_LOOPBACK,
+                                                    &lo, &evs_lsp);
+          fprintf (stderr, "[dbg] lsp create=%d s=%p\n", (int) lr,
+                   (void *) evs_lsp);
+          if (lr != ENCA_OK)
+            error ("EVS: loopback session failed");
+          snprintf (evs_lsp_uri, sizeof evs_lsp_uri,
+                    "file:///evs-loopback.c");
+          {
+            /* Prototype: fixed simulated think-time.  (An env-var
+               override tripped a getenv-vs-emacs-environ interaction
+               under this build; revisit only with evidence.) */
+            unsigned ms = 90u;
+            fprintf (stderr, "[dbg] pre-set delay=%u\n", ms);
+            enca_lsp_set_backend_delay_ms (evs_lsp, ms);
+            fprintf (stderr, "[dbg] post-set\n");
+          }
+        }
     }
   if (enca_sched_init (&evs_sched) != ENCA_OK)
     error ("EVS: scheduler init failed");
@@ -789,6 +829,36 @@ Returns the new revision.  */)
   return make_uint (rev);
 }
 
+/* EVS-5.4: real-server document sync (bench/enca/evs5/REAL_LSP.md).
+   Version == current ENCA revision at every push; didOpen exactly
+   once, then full-content didChange.  Loopback sessions have no
+   document identity server-side, so sync is a no-op there. */
+DEFUN ("enca-evs-lsp-sync", Fenca_evs_lsp_sync, Senca_evs_lsp_sync,
+       1, 1, 0,
+       doc: /* Push TEXT to the real LSP server as the document state.
+First call sends textDocument/didOpen, later calls didChange (full),
+always with version == current ENCA revision.  Returns the revision,
+or nil when no real server is armed (loopback).  */)
+  (Lisp_Object text)
+{
+  CHECK_STRING (text);
+  if (!evs_active || !evs_lsp)
+    error ("EVS completion arm not armed");
+  if (!evs_lsp_is_clangd)
+    return Qnil;
+
+  const enca_u64 rev = enca_document_revision (evs_doc);
+  const char *data = SSDATA (text);
+  enca_usize len = (enca_usize) SBYTES (text);
+  enca_result r = evs_lsp_opened
+    ? enca_lsp_did_change_full (evs_lsp, evs_lsp_uri, data, len, rev)
+    : enca_lsp_did_open (evs_lsp, evs_lsp_uri, data, len, rev);
+  if (r != ENCA_OK)
+    error ("EVS: LSP document sync failed");
+  evs_lsp_opened = true;
+  return make_uint (rev);
+}
+
 DEFUN ("enca-evs-complete", Fenca_evs_complete, Senca_evs_complete,
        1, 2, 0,
        doc: /* Run one completion through cache/backend for PREFIX.
@@ -899,6 +969,7 @@ syms_of_enca_evs (void)
   defsubr (&Senca_evs_complete);
   defsubr (&Senca_evs_ct_stats);
   defsubr (&Senca_evs_bump_revision);
+  defsubr (&Senca_evs_lsp_sync);
   defsubr (&Senca_evs_pump);
   defsubr (&Senca_evs_wait_committed);
   defsubr (&Senca_evs_last_commit);

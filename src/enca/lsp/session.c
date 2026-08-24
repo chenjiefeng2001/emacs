@@ -23,6 +23,7 @@
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
 #else
+# include <sys/wait.h>
 # include <unistd.h>
 #endif
 
@@ -256,9 +257,16 @@ read_frame (enca_lsp_session *s, const char **payload,
                   = enca_monotonic_now_ns () - t_write_done;
               *payload = s->acc + body_off;
               *payload_len = (size_t) cl;
-              /* Consume the frame: our protocol never pipelines, so
-                 the accumulator starts empty next call. */
-              s->acc_len = 0;
+              /* Consume the frame but KEEP any pipelined bytes: a
+                  real server may push several frames in one read
+                  (diagnostics/progress while we wait for a reply),
+                  so carry the remainder instead of resetting. */
+              {
+                size_t keep = s->acc_len > want ? s->acc_len - want : 0;
+                if (keep)
+                  memmove (s->acc, s->acc + want, keep);
+                s->acc_len = keep;
+              }
               s->responses_received++;
               return ENCA_OK;
             }

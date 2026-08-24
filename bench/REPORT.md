@@ -369,7 +369,7 @@ flat 的 sharing 恒 ≈1(retention 越大越差);chunked 共享率随 retention
 |---|---|---|---|
 | C0 none | 13.1μs | 10.19MB | 16.69 |
 | C1 local eager | **40.5μs(+3×)** | **16.79MB(+65%)** | 10.12 |
-| C2 deferred thr=1.25 | **11.5μs(−12%)** | 10.21MB | 16.65 | 
+| C2 deferred thr=1.25 | **11.5μs(−12%)** | 10.21MB | 16.65 |
 | C2 thr=2 / 4 / 8 | 13.4 / 14.9 / 15.7μs | ~10.2–10.8MB | 15.8–16.7 |
 
 C1 eager 被证伪(延迟 3×、物理内存 +65%——合并副本滞留保留环);**C2 deferred 全面占优**,阈值 1.25–2 最佳且对前台零停顿影响;thr=8 过懒不触发(maint_copied=0)。
@@ -596,7 +596,7 @@ Copy amplification:incremental 臂 copied==changed=104,869,888B → **恰为 1.0
 - 主导项:合成分析 = 每 revision 对全文做 FNV——full 臂读连续内存,E2E−capture @100MB ≈ 362ms;
 - incremental 臂同一分析走 piece-walk(~2000 片段、分散访问)≈ +120ms/revision——**捕获省下的 90ms 被全文分析的碎片化读取吃掉还倒贴**。
 
-### 18.5 判定:**NO-GO(指标错位守卫触发)** 
+### 18.5 判定:**NO-GO(指标错位守卫触发)**
 按 EVS2-DECISION.md §8 事先冻结的停止规则:capture 改善 >100× 而 keypress→visible 未改善 → **snapshot 存储优化到此永久停止**(§7 stop conditions 不因任何内部指标重开)。本结论同时验证了守卫机制本身有效:若没有 A/B 门禁,增量捕获会以「capture 快 19000×」为名继续吸投,而用户实际感知为零。
 
 被否决的方向:piece-table 合并/rope/B-tree/任何存储深化。附带发现:增量臂略慢源于**全文档式消费者**(合成 FNV),真实区域型消费者(诊断/completion 增量解析)不会支付该成本——但那是 task/analysis 语义的新 vertical slice,不是存储工作。
@@ -873,3 +873,35 @@ GROWTH cell 与 F1 的引擎侧数字**完全一致**(exact=9 / extend=2 / miss=
 - runner:bench/enca/evs531_run.sh(WSL,script -qec,EVS53_LOG 直写仓库 results/)
 - 契约+结果:bench/enca/evs5/CACHE.md §11
 - 排障记录:harness 首版 GROWTH 词选择公式误写为 `(% i 12)`(原版 `(/ i 4)`)导致 exact 虚高 34.4%→46.9%;经原版复现 + 二分定位后修正。
+
+
+## 28. EVS-5.4 Closure — 真实 LSP 打通 elisp 用户路径(2026-08-25)
+
+### 28.1 契约与实现
+`enca-evs-start` 的 BACKEND 参数落地 docstring 早已承诺的字符串形态:传路径即 spawn 真 LSP server(ENCA_LSP_CLANGD,握手全部在 start 时、测量路径之外);新增 `enca-evs-lsp-sync TEXT` 以 didOpen/didChange(full)推送文档状态,version 恒等于 ENCA revision。模拟延迟在 CLANGD 模式结构性不可能(session.c 仅 LOOPBACK 分支注入)。契约:bench/enca/evs5/REAL_LSP.md。
+
+### 28.2 结果(tty,真 clangd 18.1.3;原始数据 results/evs54_real_lsp.log)
+| cell | ops | exact | extend | miss | avoided | eng p50 | vis p50 |
+|---|---|---|---|---|---|---|---|
+| COLD | 1 | – | – | 1 | – | **3.51ms** | 10.5ms |
+| RETRY | 30 | 30 | 0 | 0 | **100%** | **0.14ms** | 2.6ms |
+| GROWTH | 32 | 9 | 2 | 21 | **34.4%** | 4.29ms | 7.0ms |
+| NOVEL | 15 | 0 | 0 | 15 | 0% | **4.60ms** | 7.4ms |
+| EDITMIX | 12 | 0 | 0 | 12 | 0%(by design)| 4.27ms | 6.9ms |
+
+### 28.3 判定
+- false_hit=0 硬门禁保持;GROWTH 精确复现 F1 混合(9/2/21);
+- **引擎级 source 序列与 loopback 版逐 op 完全一致(32/32)**:后端替换对缓存层透明,交叉验证强度空前;
+- C8c 引擎侧条款各类全 MET(hit <1ms);可见延迟归因仍是 redisplay 地板(inst ~0.06ms / red ~2.4ms),与 §27 一致。
+
+### 28.4 重要口径警示
+NOVEL 真实 miss p50 ~4.6ms 远低于注入 90ms 与 B2 真实项目 ~77ms:合成单行无 include 文档给 clangd 的 AST 近乎为空,且 didOpen 让解析与 setup 重叠。**本阶段验证的是路径正确性与分类形状,不修正后端主导性结论——真实项目的 candidate-ready 仍以 §21 的 78–92ms 为准。**
+
+### 28.5 本阶段揪出并修复的两个真实缺陷
+1. **read_frame 帧边界丢失**(session.c):消费一帧后累加器直接清零,丢弃同块已读入的流水线帧字节。loopback 严格一写一帧回声,历代 loopback 阶段全部不可见;真 server 会把 publishDiagnostics/$/progress 与应答混流 → 解析失步 → 野指针 SIGSEGV。修复:memmove 保留余量。
+2. **enca-evs.c 缺原型**(自 cacc4a55/EVS-5.2.6 潜伏):enca_malloc/enca_free/enca_json_collect_item_labels 隐式 int 声明,属未定义行为。-O2 下 GCC 恰好整寄存器透传 RAX(实证:HEAD 版二进制重跑 531 harness 全部数字如常),但语言不保证,-O0 物化截断则确定性崩溃——本阶段首次接入真后端时即触发。补 memory.h/jsonrpc.h/sys/wait.h 修复。
+   顺手修:evs_ct_exec else 分支缺花括号导致 hit 也计 ct_misses(仅统计,无门禁消费)。
+修复后回归:原生套件 **34201 checks / 0 failures**(WSL clangd 就位后 B2 臂首次真跑),evs54 全量重跑通过。
+
+### 28.6 环境
+WSL 侧 `apt install clangd`(18.1.3)、valgrind 已装;Windows clangd 19.1 未用(构建树在 WSL)。
