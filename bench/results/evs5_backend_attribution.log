@@ -1,0 +1,271 @@
+[base]
+  ok (5 checks)
+[id/layout]
+  ok (8 checks)
+[id/lifecycle]
+  ok (16 checks)
+[id/types]
+  ok (8 checks)
+[id/invalid-args]
+  ok (6 checks)
+[id/many]
+  ok (5005 checks)
+[memory/stats]
+  ok (7 checks)
+[memory/calloc]
+  ok (2 checks)
+[memory/realloc]
+  ok (5 checks)
+[memory/strdup]
+  ok (3 checks)
+[memory/double-free]
+  ok (2 checks)
+[memory/foreign-ptr]
+  ok (1 checks)
+[arena/alignment]
+  ok (15 checks)
+[arena/growth]
+  ok (202 checks)
+[arena/reset]
+  ok (6 checks)
+[arena/large]
+  ok (1 checks)
+[slab/basic]
+  ok (9 checks)
+[slab/growth]
+  ok (105 checks)
+[slab/alignment]
+  ok (22 checks)
+[slab/invalid-init]
+  ok (5 checks)
+[slab/foreign-free]
+  ok (1 checks)
+[time/monotonic-order]
+  ok (1000 checks)
+[time/monotonic-advance]
+  ok (1 checks)
+[time/wallclock]
+  ok (1 checks)
+[time/deadline]
+  ok (9 checks)
+[time/cpu]
+  ok (1 checks)
+[thread/create-join]
+  ok (4 checks)
+[thread/many-threads]
+  ok (17 checks)
+[thread/mutex]
+  ok (6 checks)
+[thread/cond-handshake]
+  ok (4 checks)
+[thread/timed-wait]
+  ok (3 checks)
+[thread/try-lock]
+  ok (4 checks)
+[thread/tls]
+  ok (12 checks)
+[thread/self-id]
+  ok (4 checks)
+[queue/spsc-fifo]
+  ok (30 checks)
+[queue/spsc-stress]
+  ok (5 checks)
+[queue/bq-timeout-close]
+  ok (13 checks)
+[queue/bq-stress]
+  ok (8 checks)
+[queue/bq-invalid]
+  ok (2 checks)
+[event/sequence]
+  ok (2 checks)
+[event/init]
+  ok (8 checks)
+[event/dispatch-spsc]
+  ok (9 checks)
+[event/dispatch-limit]
+  ok (3 checks)
+[event/dispatch-error]
+  ok (1 checks)
+[event/dispatch-timeout]
+  ok (2 checks)
+[cancel/basic]
+  ok (4 checks)
+[cancel/child-parent]
+  ok (3 checks)
+[cancel/parent-independent]
+  ok (2 checks)
+[cancel/grandchild]
+  ok (3 checks)
+[cancel/refcount]
+  ok (2 checks)
+[cancel/invalid]
+  ok (3 checks)
+[cancel-race/borrow-unretained]
+  ok (0 checks)
+[cancel-race/retain-on-load]
+  ok (11 checks)
+[perf/counter]
+  ok (2 checks)
+[perf/histogram]
+  ok (16 checks)
+[perf/timer]
+  ok (2 checks)
+[trace/dump]
+  ok (9 checks)
+[runtime/lifecycle]
+  ok (4 checks)
+[runtime/invalid-init]
+  ok (3 checks)
+[runtime/commit-values]
+  ok (7 checks)
+[runtime/stale-drop]
+  ok (107 checks)
+[runtime/ordering]
+  ok (503 checks)
+[runtime/shutdown-pending]
+  ok (4003 checks)
+[runtime/metrics]
+  ok (810 checks)
+[snapshot/content]
+  ok (62 checks)
+[snapshot/lifetime]
+  ok (96 checks)
+[snapshot/stale]
+  ok (32 checks)
+[snapshot/destruction]
+  ok (30 checks)
+[sched-exec/single]
+  ok (7 checks)
+[sched-exec/burst]
+  ok (5004 checks)
+[sched-exec/stale-gate]
+  ok (5 checks)
+[sched-exec/shutdown-storm]
+  ok (5 checks)
+[dstate/basic]
+  ok (16 checks)
+[dstate/retention]
+  ok (107 checks)
+[dstate/torture]
+  torture: 8MB, 1000 edits, 125 retained, pieces=1997 avg=4200.6 alloc_bytes=8389607 len=8388608, 646.9ms
+  ok (1663 checks)
+[dstate/adopt]
+  ok (16 checks)
+[wake/single]
+  ok (7 checks)
+[wake/burst]
+  ok (4 checks)
+[wake/drain-race]
+  ok (4 checks)
+[wake/notify-during-drain]
+  ok (4 checks)
+[wake/producer-storm]
+  ok (7 checks)
+[wake/shutdown]
+  ok (75 checks)
+[wake/generation-reset]
+  ok (23 checks)
+[ct/basic]
+  ok (19 checks)
+[ct/extract-oracle]
+  ok (137 checks)
+[ct/o-region-budget]
+    CTBUDGET|1MB|avg=1.442us|region=256b|pieces=801
+    CTBUDGET|8MB|avg=3.019us|region=256b|pieces=801
+    CTBUDGET|10MB|avg=3.354us|region=256b|pieces=801
+  ok (7230 checks)
+[ct/storm]
+    CTSTORM|interval=0ms|submitted=12|queued=12|executed=1|folded=0
+    CTSTORM|interval=2ms|submitted=12|queued=12|executed=12|folded=0
+    CTSTORM|interval=10ms|submitted=12|queued=12|executed=12|folded=0
+    CTSTORM|interval=50ms|submitted=12|queued=12|executed=12|folded=0
+  ok (46 checks)
+[lsp/jsoncodec]
+  ok (13 checks)
+[lsp/commit-gate]
+  ok (7 checks)
+[lsp/loopback-attribution]
+    LSPB1|loopback|K=200|avg_rt=28.52us|max_rt=484.50us|avg_ser=3.13us avg_parse=7.08us resp_bytes_total=31492 (didOpen setup=0.502ms)
+  ok (204 checks)
+[lsp/clangd-session]
+    LSPT|setup|spawn+initialize=78.0ms (C:\Program Files\LLVM\bin\clangd.exe)
+    LSPT|setup|didOpen 1024KB=5.2ms
+    LSPT|B2-clangd|ok=20/20|p50=79.37ms p95=169.16ms max=169.16ms|med_resp_bytes=68
+  ok (3 checks)
+[lsp/storm-real]
+    SKIP: set ENCA_LSP_STORM=1 to run
+  ok (0 checks)
+[evs51/context-sweep]
+    CTXSWEEP|32|n=12|p50=61.83|p95=83.01|max=93.12
+    CTXSWEEP|256|n=12|p50=76.87|p95=78.72|max=79.22
+    CTXSWEEP|1024|n=12|p50=77.66|p95=93.97|max=94.55
+    CTXSWEEP|4096|n=12|p50=63.70|p95=86.33|max=124.89
+    CTXSWEEP|16384|n=12|p50=74.41|p95=93.94|max=95.21
+    CTXSWEEP|32768|n=12|p50=78.44|p95=80.72|max=92.04
+  ok (1 checks)
+[evs52/stale-attribution]
+    STALE|cadence=0ms|cancel=0|responses=4/12|drain_ms=0.38|last_resp_ms=0.38|stale_after_final=4
+    GAPS|cadence=0ms|cancel=0|min=0.01|med=0.07|max=0.09
+    STALE|cadence=0ms|cancel=1|responses=2/12|drain_ms=0.49|last_resp_ms=0.49|stale_after_final=2
+    GAPS|cadence=0ms|cancel=1|min=0.36|med=0.36|max=0.36
+    STALE|cadence=10ms|cancel=1|responses=1/12|drain_ms=169.62|last_resp_ms=169.62|stale_after_final=1
+    STALE|cadence=50ms|cancel=1|responses=2/12|drain_ms=677.81|last_resp_ms=677.81|stale_after_final=2
+    GAPS|cadence=50ms|cancel=1|min=0.31|med=0.31|max=0.31
+  ok (2 checks)
+[evs53/cache-locality]
+    CACHE|first=61.56|repeat=60.99|plus1=76.84|minus1=76.52|far=62.08|newrev_samepos=61.65
+  ok (2 checks)
+[ctcache/lru-basics]
+  ok (31 checks)
+[ctcache/no-false-hits]
+  ok (2 checks)
+[ctcache/prefix-filter-oracle]
+  ok (6 checks)
+[ctcache/c8-budgets]
+    C8a|lookup_p50=0.100us|C8b|filter_p50=0.300us (500 candidates)
+  ok (2006 checks)
+[ctpath/matrix]
+    CTM|count=10|len=32|annot=0|filter=0|kept=50|build_us=0.40|popup_us=0.000|total_us=0.40
+    CTM|count=10|len=32|annot=0|filter=1|kept=50|build_us=0.80|popup_us=0.000|total_us=0.80
+    CTM|count=10|len=32|annot=0|filter=2|kept=50|build_us=1.10|popup_us=0.000|total_us=1.10
+    CTM|count=100|len=8|annot=0|filter=0|kept=50|build_us=1.60|popup_us=0.000|total_us=1.70
+    CTM|count=100|len=8|annot=0|filter=1|kept=50|build_us=3.80|popup_us=0.100|total_us=3.80
+    CTM|count=100|len=8|annot=0|filter=2|kept=50|build_us=4.80|popup_us=0.000|total_us=4.80
+    CTM|count=100|len=8|annot=16|filter=0|kept=50|build_us=2.40|popup_us=0.100|total_us=2.50
+    CTM|count=100|len=8|annot=16|filter=1|kept=50|build_us=6.10|popup_us=0.100|total_us=6.10
+    CTM|count=100|len=8|annot=16|filter=2|kept=50|build_us=9.00|popup_us=0.100|total_us=9.00
+    CTM|count=100|len=32|annot=0|filter=0|kept=50|build_us=2.50|popup_us=0.000|total_us=2.50
+    CTM|count=100|len=32|annot=0|filter=1|kept=50|build_us=6.10|popup_us=0.000|total_us=6.10
+    CTM|count=100|len=32|annot=0|filter=2|kept=50|build_us=9.50|popup_us=0.100|total_us=9.50
+    CTM|count=100|len=32|annot=16|filter=0|kept=50|build_us=3.00|popup_us=0.000|total_us=3.10
+    CTM|count=100|len=32|annot=16|filter=1|kept=50|build_us=8.80|popup_us=0.000|total_us=8.90
+    CTM|count=100|len=32|annot=16|filter=2|kept=50|build_us=12.60|popup_us=0.000|total_us=12.60
+    CTM|count=100|len=128|annot=0|filter=0|kept=50|build_us=5.20|popup_us=0.000|total_us=5.20
+    CTM|count=100|len=128|annot=0|filter=1|kept=50|build_us=16.50|popup_us=0.100|total_us=16.50
+    CTM|count=100|len=128|annot=0|filter=2|kept=50|build_us=23.20|popup_us=0.100|total_us=23.20
+    CTM|count=100|len=128|annot=16|filter=0|kept=50|build_us=5.70|popup_us=0.100|total_us=5.70
+    CTM|count=100|len=128|annot=16|filter=1|kept=50|build_us=17.60|popup_us=0.100|total_us=17.60
+    CTM|count=100|len=128|annot=16|filter=2|kept=50|build_us=26.60|popup_us=0.100|total_us=26.60
+    CTM|count=100|len=512|annot=0|filter=0|kept=50|build_us=17.00|popup_us=0.100|total_us=17.00
+    CTM|count=100|len=512|annot=0|filter=1|kept=50|build_us=55.00|popup_us=0.100|total_us=55.10
+    CTM|count=100|len=512|annot=0|filter=2|kept=50|build_us=81.80|popup_us=0.100|total_us=81.80
+    CTM|count=100|len=512|annot=16|filter=0|kept=50|build_us=16.90|popup_us=0.100|total_us=17.00
+    CTM|count=100|len=512|annot=16|filter=1|kept=50|build_us=57.50|popup_us=0.100|total_us=57.60
+    CTM|count=100|len=512|annot=16|filter=2|kept=50|build_us=87.10|popup_us=0.100|total_us=87.20
+    CTM|count=1000|len=32|annot=0|filter=0|kept=50|build_us=24.60|popup_us=0.000|total_us=24.60
+    CTM|count=10000|len=8|annot=0|filter=0|kept=50|build_us=166.00|popup_us=0.100|total_us=166.10
+    CTM|count=10000|len=32|annot=0|filter=0|kept=50|build_us=280.80|popup_us=0.100|total_us=280.90
+    CTM|count=10000|len=128|annot=0|filter=0|kept=50|build_us=607.10|popup_us=0.100|total_us=607.30
+    CTM|count=10000|len=512|annot=0|filter=0|kept=50|build_us=1984.10|popup_us=0.200|total_us=1984.30
+  ok (32 checks)
+[sched-exec/single]
+  ok (7 checks)
+[sched-exec/burst]
+  ok (5004 checks)
+[sched-exec/stale-gate]
+  ok (5 checks)
+[sched-exec/shutdown-storm]
+  ok (5 checks)
+
+34059 checks, 0 failures
+EXITCODE=0 
