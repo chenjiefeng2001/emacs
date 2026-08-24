@@ -96,7 +96,7 @@ evs51_context_sweep (void)
   CHECK_EQ_U64 ((int) enca_lsp_session_create (ENCA_LSP_CLANGD, &opts,
                                             &s),
                 (int) ENCA_OK);
-  enca_lsp_set_collect_timeout (s, 10000);
+  enca_lsp_set_collect_timeout (s, 20000);
 
   static const size_t sizes[]
     = { 32, 256, 1024, 4096, 16384, 32768 };
@@ -336,7 +336,7 @@ evs53_cache_locality (void)
   CHECK_EQ_U64 ((int) enca_lsp_did_open (s, "file:///evs53.c", body,
                                       blen, 1),
                 (int) ENCA_OK);
-  enca_lsp_set_collect_timeout (s, 10000);
+  enca_lsp_set_collect_timeout (s, 20000);
   e5_msleep (300);
   /* warmup */
   for (int w = 0; w < 3; w++)

@@ -68,6 +68,7 @@ main (void)
   void run_test_completion (void);
   void run_test_lsp (void);
   void run_test_evs5 (void);
+  void run_test_ctcache (void);
   void run_test_ctpath (void);
   void run_test_scheduler (void);
 
@@ -91,6 +92,7 @@ main (void)
   run_test_completion ();
   run_test_lsp ();
   run_test_evs5 ();
+  run_test_ctcache ();
   run_test_ctpath ();
   run_test_scheduler ();
 

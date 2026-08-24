@@ -23,6 +23,7 @@ ENCA_SRC = \
 	../../src/enca/snapshot/snapshot.c \
 	../../src/enca/scheduler/scheduler.c \
 	../../src/enca/completion/completion.c \
+	../../src/enca/completion/cache.c \
 	../../src/enca/lsp/jsonrpc.c \
 	../../src/enca/lsp/transport.c \
 	../../src/enca/lsp/session.c \
@@ -50,6 +51,7 @@ TEST_SRC = \
 	test_lsp.c \
 	test_ctpath.c \
 	test_evs5.c \
+	test_ctcache.c \
 	test_dstate.c
 
 all: enca_tests
