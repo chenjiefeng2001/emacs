@@ -26,6 +26,9 @@
 
 #define LSP_DEADLINE_NS (30000ull * 1000000ull) /* 30s hard guard */
 
+/* Per-session idle deadline for response collection. */
+static unsigned lsp_collect_timeout_ms = 30000;
+
 struct enca_lsp_session
 {
   enca_lsp_mode mode;
@@ -142,7 +145,8 @@ read_frame (enca_lsp_session *s, const char **payload,
             const enca_u64 t_write_done)
 {
   size_t scanned = 0;
-  const enca_u64 deadline = enca_monotonic_now_ns () + LSP_DEADLINE_NS;
+  const enca_u64 deadline = enca_monotonic_now_ns ()
+    + (enca_u64) lsp_collect_timeout_ms * 1000000ull;
 
   for (;;)
     {
@@ -545,12 +549,20 @@ round_trip (enca_lsp_session *s, const char *payload, size_t len,
     return r;
   const enca_u64 t1 = enca_monotonic_now_ns ();
 
+  /* Skip server notifications until the frame carrying EXPECT_ID
+     arrives (publishDiagnostics etc. interleave freely). */
   const char *rp = NULL;
   size_t rl = 0;
   enca_u64 rt = 0;
-  r = read_frame (s, &rp, &rl, &rt, t1);
-  if (r != ENCA_OK)
-    return r;
+  for (;;)
+    {
+      enca_result rr = read_frame (s, &rp, &rl, &rt, t1);
+      if (rr != ENCA_OK)
+        return rr;
+      enca_u64 rid = 0;
+      if (enca_json_get_u64 (rp, rl, "id", &rid) && rid == expect_id)
+        break;
+    }
   const enca_u64 t2 = enca_monotonic_now_ns ();
 
   enca_u64 rid = 0;
@@ -701,4 +713,117 @@ enca_lsp_find_clangd (void)
       }
   return NULL;
 #endif
+}
+
+/* ---------------- EVS-5 attribution primitives ---------------- */
+
+enca_result
+enca_lsp_send_completion (enca_lsp_session *s, const char *uri,
+                          size_t line, size_t character, enca_u64 *out_id)
+{
+  if (!s || !uri || !out_id)
+    return ENCA_ERR_INVALID_ARGUMENT;
+
+  jb_reset_keep_cap (&s->out);
+  enca_u64 id = s->next_id++;
+  enca_result r = jb_printf (
+    &s->out, "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"method\":\"textDocument/"
+             "completion\",\"params\":{\"textDocument\":{\"uri\":",
+    (unsigned long long) id);
+  if (r != ENCA_OK)
+    return r;
+  r = jb_put_json_string (&s->out, uri, strlen (uri));
+  if (r != ENCA_OK)
+    return r;
+  r = jb_printf (&s->out,
+                 "},\"position\":{\"line\":%zu,\"character\":%zu}}}",
+                 line, character);
+  if (r != ENCA_OK)
+    return r;
+
+  r = send_frame (s, s->out.buf, s->out.len, NULL, NULL);
+  if (r == ENCA_OK)
+    *out_id = id;
+  return r;
+}
+
+enca_result
+enca_lsp_collect_response (enca_lsp_session *s, enca_u64 expect_id,
+                           const char **response, size_t *response_len,
+                           enca_u64 *arrive_ns)
+{
+  /* Server-initiated NOTIFICATIONS (publishDiagnostics etc.) carry no
+     id and must be skipped until the frame with the matching id
+     arrives.  EXPECT_ID == 0 accepts any id-bearing response (storm
+     attribution). */
+  const enca_u64 deadline = enca_monotonic_now_ns ()
+    + (enca_u64) lsp_collect_timeout_ms * 1000000ull;
+
+  for (;;)
+    {
+      if (enca_monotonic_now_ns () >= deadline)
+        return ENCA_ERR_TIMEOUT;
+
+      const char *rp = NULL;
+      size_t rl = 0;
+      enca_result r = read_frame (s, &rp, &rl, NULL, deadline);
+      if (r != ENCA_OK)
+        return r;
+
+      enca_u64 rid = 0;
+      bool have_id = enca_json_get_u64 (rp, rl, "id", &rid);
+      if (!have_id)
+        continue;               /* notification: skip */
+
+      if (expect_id != 0 && rid != expect_id)
+        continue;               /* stale/mismatched id: keep scanning */
+
+      bool ok = s->mode == ENCA_LSP_LOOPBACK
+                || enca_json_has_member (rp, rl, "result");
+
+      if (s->resp_cap < rl)
+        {
+          char *nb = realloc (s->resp, rl);
+          if (!nb)
+            return ENCA_ERR_OUT_OF_MEMORY;
+          s->resp = nb;
+          s->resp_cap = rl;
+        }
+      memcpy (s->resp, rp, rl);
+      s->resp_len = rl;
+      if (response)
+        *response = s->resp;
+      if (response_len)
+        *response_len = rl;
+      if (arrive_ns)
+        *arrive_ns = enca_monotonic_now_ns ();
+      s->responses_received++;
+      return ok ? ENCA_OK : ENCA_ERR_CANCELLED;
+    }
+}
+
+enca_result
+enca_lsp_cancel_id (enca_lsp_session *s, enca_u64 id)
+{
+  if (!s)
+    return ENCA_ERR_INVALID_ARGUMENT;
+  jb_reset_keep_cap (&s->out);
+  enca_result r = jb_printf (
+    &s->out, "{\"jsonrpc\":\"2.0\",\"method\":\"$/cancelRequest\","
+             "\"params\":{\"id\":%llu}}",
+    (unsigned long long) id);
+  if (r != ENCA_OK)
+    return r;
+  /* Layer-2 optimization: best effort.  In LOOPBACK mode the echo is
+     drained to keep the stream aligned. */
+  r = send_frame (s, s->out.buf, s->out.len, NULL, NULL);
+  return drain_echo_if_loopback (s, r);
+}
+
+void
+enca_lsp_set_collect_timeout (enca_lsp_session *s, unsigned ms)
+{
+  (void) s;                     /* process-global knob, deliberately */
+  if (ms)
+    lsp_collect_timeout_ms = ms;
 }

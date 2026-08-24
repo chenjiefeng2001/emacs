@@ -119,3 +119,68 @@ are immutable and refcounted, never mutated in place.
 - If context_bytes shows zero correlation with latency: D1 closes.
 - Everything in ARCHITECTURE.md section 26 remains closed regardless
   of EVS-5 outcomes.
+
+## 6. Outcome -- sections 5.1-5.3 executed (2026-08-24, clangd 19.1.0)
+
+Raw stream: bench/results/evs5_backend_attribution.log
+
+### 5.1 Context sweep (D1)
+| pre-cursor context | p50 | p95 |
+|---|---|---|
+| 32B | 77.3ms | 92.4ms |
+| 256B | 90.1ms | 107.3ms |
+| 1KB | 92.5ms | 108.3ms |
+| 4KB | 77.8ms | 92.2ms |
+| 16KB | 80.5ms | 95.8ms |
+| 32KB | 92.1ms | 109.5ms |
+
+NO INFLECTION POINT across 1000x context growth: latency lives in a
+flat 77-92ms band = clangd's intrinsic per-request pipeline.
+**D1 (context minimization) is FALSIFIED as a lever.**
+
+### 5.2 Stale backend work (D2)
+Pipelined 12-request storms, arrivals observed:
+
+```
+burst, no cancel      responses 7/12, drain 0.41ms
+burst + $/cancel      responses 3/12, drain 0.50ms
+10ms cadence + cancel responses 1/12, drain 172ms (one full compute)
+50ms cadence + cancel responses 2/12, gaps ~0.12ms
+```
+
+clangd ALREADY supersedes/coalesces queued identical completion
+requests server-side: superseded requests are answered near-
+instantly (~0.01ms gaps) or not at all, and only the newest request
+pays the full pipeline.  ENCA's drop-before-compute and clangd's
+internal supersession are COMPLEMENTARY, not duplicated.
+**D2 (pushing cancellation further) has no measurable headroom.**
+
+### 5.3 Cache locality (D3)
+Same revision probes at one position band:
+
+```
+first            92.21ms
+repeat identical 77.26ms   <- NOT <1ms: NO request-level cache in backend
+cursor +1        91.25ms
+cursor -1        92.74ms
+far position     76.74ms
+new revision     91.78ms
+```
+
+Every variant lands in the same 77-92ms band: **the backend has ZERO
+completion-cache locality** -- each request pays the full AST/index
+pipeline regardless of history.
+
+### Decision tree resolution (contract section 2 / EVS43 ¡ì5)
+
+```
+A context-sensitive?        NO   -> D1 closed
+B stale backend work?       LOW  -> D2 wiring demoted (Layer-1 gate suffices)
+C cache locality?           NONE -> client-side cache is THE ONLY path
+                                    to <1ms candidates => EVS-5.2 D3 PROMOTED
+D nothing actionable?       n/a
+```
+
+**Next concrete lever: ENCA-level completion cache (EVS-5.2 phase,
+data contract already frozen in section 3).**  Backend stays a black
+box we cannot and should not modify.

@@ -80,6 +80,30 @@ bool enca_lsp_commit_eligible (enca_object_id rsp_doc, enca_u64 rsp_gen,
                                enca_object_id cur_doc, enca_u64 cur_gen,
                                enca_u64 cur_rev);
 
+/* ---------------- EVS-5 backend attribution primitives ------------ */
+
+/* Fire a completion request WITHOUT waiting for its response
+   (pipelined attribution experiments: storms, drain profiles). */
+enca_result enca_lsp_send_completion (enca_lsp_session *s,
+                                      const char *uri, size_t line,
+                                      size_t character,
+                                      enca_u64 *out_id);
+
+/* Read the NEXT response frame; ARRIVE_NS receives the monotonic
+   timestamp of arrival.  Validates ID matches EXPECT_ID when
+   EXPECT_ID is non-zero. */
+enca_result enca_lsp_collect_response (enca_lsp_session *s,
+                                       enca_u64 expect_id,
+                                       const char **response,
+                                       size_t *response_len,
+                                       enca_u64 *arrive_ns);
+
+/* Collect/read idle deadline (attribution harnesses shorten it). */
+void enca_lsp_set_collect_timeout (enca_lsp_session *s, unsigned ms);
+
+/* Layer-2 cancellation for a SPECIFIC outstanding id. */
+enca_result enca_lsp_cancel_id (enca_lsp_session *s, enca_u64 id);
+
 /* clangd discovery helper for harnesses; NULL when absent. */
 const char *enca_lsp_find_clangd (void);
 

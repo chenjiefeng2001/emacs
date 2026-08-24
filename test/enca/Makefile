@@ -49,6 +49,7 @@ TEST_SRC = \
 	test_completion.c \
 	test_lsp.c \
 	test_ctpath.c \
+	test_evs5.c \
 	test_dstate.c
 
 all: enca_tests
