@@ -45,11 +45,37 @@
 | edit/1MB visible p99              | 9.0          | 3.6         | 37.8*       | 6.7         |
 | rdisp/R3 max                      | 14.9         | 14.7        | 14.1        | 7.4         |
 
+## Tier 2 attribution (Phase 2, filled 2026-08-25)
+
+Source: bench/results/eipb_t2.log (467 lines/build, D+A, single
+session each); verdicts in bench/eipb/phase2/report/PHASE2.md.
+p50 ms unless noted; format D / A.
+
+| cell                                  | D           | A           |
+|---------------------------------------|-------------|-------------|
+| fl/c/100KB natural p99                | 112         | 100         |
+| fl/c/100KB natural stalls>100ms (/40) | 6           | 1           |
+| fl/org/1MB natural p50                | 12.7        | 3.7         |
+| fl/elisp/1MB natural p50              | 0.78        | 0.67        |
+| fl/python/1MB natural p50             | 3.20        | 4.25        |
+| fl plain control natural p50 (1MB)    | 20.4        | 12.3        |
+| full-fontify cold c/1MB (one-shot s)  | 108         | 110         |
+| gcp/nogc max (EOB typing 1000 ops)    | 31.0        | 31.6        |
+| gcp/natural max                       | 38.0        | 36.1        |
+| gcp/forced max                        | 52.1        | 51.0        |
+| win1 -> win8 editvis p50              | 19.9 -> 47.2| 11.7 -> 26.3|
+| win8 noop p50                         | 0.13        | 0.13        |
+| buf100 switch p50                     | 47.3        | 17.7*       |
+| spot8x100 editvis p50                 | 48.4        | 12.6*       |
+| memory end (KB)                       | 42404       | 40356       |
+
 ## Pending (future tiers)
 
-font-lock chain / file I/O ladder / multi-buffer x window /
-isearch interactive / IDE-MIXED-01 trace / SOAK-30M+2H /
-GUI variants / external IDE reference: **PENDING (EIPB.md T2-T5)**
+file I/O ladder / isearch interactive / IDE-MIXED-01 trace /
+SOAK-30M+2H / GUI variants / external IDE reference:
+**PENDING (EIPB.md T3-T5)**.
+B/C rows on the mid-buffer D-vs-A gap (fl/plain + wb cells):
+**PENDING-B/C-CHECK** (next matrix run).
 
 ## Notes
 
@@ -65,3 +91,7 @@ GUI variants / external IDE reference: **PENDING (EIPB.md T2-T5)**
   it dwarfs every other tail in the table.
 - ENCA impact across editing/redisplay/search/undo: differences sit
   inside the noise band; no cell shows a systematic C/D regression.
+- Tier 2 * = unreplicated single-session gap, flagged PENDING-B/C-CHECK
+  (fork-base vs ENCA-enabled not separable without B/C rows).  The gap
+  appears ONLY on mid-buffer edit+visible paths; EOB insert, idle noop
+  and cold fontification show D==A exactly (PHASE2.md section 4).

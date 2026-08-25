@@ -955,3 +955,18 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 
 ### 30.4 排障记录(全部实证)
 ①`(undo)` 命令批处理怪癖(user-error)→ 改 `primitive-undo`;②`gc-elapsed` 实际以秒推进(10 次 GC delta=1.48)与手册 µs 说法不符 → 按 ×1000 修正;③**撤销必须抑制自身记录**,否则历史每次调用翻倍(O(2^n) 爆炸,harness 卡死根因);④**已消费条目须及时清空**,残留会让后续 primitive-undo 报 "outside visible portion"(bisect6 逐轮插桩定位)。
+
+
+## 31. P0-EIPB Phase 2 — 尾延迟归因(2026-08-25)
+
+### 31.1 执行概况
+合同冻结三问(font-lock 链 / GC 用户路径 / 多窗口多缓冲),D+A 双构建 tty 各 **467 行、完全对称、零 FATAL**,总墙钟 2925s。原始数据 results/eipb_t2.log,判定表 bench/eipb/phase2/report/PHASE2.md。
+
+### 31.2 判定
+- **Q1 font-lock 是编辑尾延迟源,但强模式依赖**:c-mode 单键内 jit 上下文块重刷可 ≥100ms(100KB 下 40 键中 6 次,vanilla 同样存在);org-mode 每键 ~12-15ms 均匀税;elisp/python 键级 <1-4ms 实际免税。冷全量 fontify:c/1MB ≈108-110s、python/1MB ≈265-286s、c/10MB ≈786-964s(A/D 无系统性差)。
+- **Q2 GC 暂停确实落入用户可感路径(首次实测证实)**:强制每 25 键 GC 使 max 31→52ms(+67%)、p99 +51%,两构建同形;但默认阈值下自然触发仅 6/1000 键,tail 仅 +7-10ms。T1 大堆 190-320ms 危险形态不变——优先级排序应为"随堆大小增长的暂停时长",非 GC 频率。
+- **Q3 窗口数(非缓冲数)是可见延迟乘子**:edit+visible 随窗格数 1→2 翻倍后饱和(8 窗 ~45-47ms vs 1 窗 12-20ms);空闲 noop 与窗口数无关(~0.15ms);滚动成本反随窗格变小而降。缓冲切换亚线性。
+- **ENCA 影响仍≈噪声带,但出现一个待查信号**:EOB 插入/空闲 noop/冷 fontify 全部 D==A;mid-buffer 编辑+可见类 D 高出 A 1.3-2.8x 且随规模放大(buf10 1.66x→buf100 2.68x→8x100 聚焦 3.83x)。Phase 2 未跑 B/C,无法区分 fork 底座 vs ENCA 启用 → 标记 PENDING-B/C-CHECK,按学说不下结论。
+
+### 31.3 排障记录(session-2/3 全部实证)
+① 上 session 死因:磁盘 harness 是半成品重构(`eipb2--timed-reps` 被调用未定义、`wb-make-buffers` 命名错位),且 FL 单节 420s 超时杀死后续全部问题 → 本轮补齐定义、逐格 condition-case 隔离、FL/GCPATH/WB 分节独立超时;② plain 控制臂崩溃根因:**上游 jit-lock--run-functions 在 jit-lock-functions 为空时对 (min nil beg) 求值崩溃**(batch 复现,vanilla 同样)→ 控制臂跳过 jit 调用并留痕;③ popup 数据整列缺失:辅助函数经参数 push 只改局部形参(lexical-binding)→ 改返回值传递;④ GCPATH 臂表引号列表内 `(* 64 1024 1024)` 不求值 → 字面量;⑤ script(1) pty 默认高度装不下 8 窗(window-min-height)→ harness 开局 set-frame-height 50;⑥ wsl.exe 会话退出会杀裸 nohup 后台任务 → setsid+`</dev/null` 启动器。

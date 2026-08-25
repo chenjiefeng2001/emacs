@@ -44,16 +44,17 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
     Redisplay (tty)        ██░░       EVS-4.4 + P0 tty + EIPB T1
     Search/regexp          ██░░       P0 batch + EIPB T1
     Diagnostics            ██░░       EVS-4.3 storm-real
-    Large-file editing     █░░░       P0 1MB only -> T1 extends
-    GC                     █░░░       P0 gc-full -> T1 extends
+    Large-file editing     ███░       P0 1MB only -> T1 extends
+    GC                     ██░░       P0 gc-full + T1 + T2 Q2 (user-path)
     Startup                █░░░       ad-hoc -> T1 formalizes
     Undo/redo              ░░░░       -> T1
     Lisp evaluation        █░░░       P0 sort/string cells only
     Lisp compilation       ░░░░       deferred (T2)
-    Syntax/font-lock       ░░░░       deferred (T2; keypress->
-                                      fontify->redisplay->visible)
+    Syntax/font-lock       ███░       T2 Q1 chain measured (c/org/elisp/
+                                      python/plain, 100KB-10MB)
     File I/O               ░░░░       deferred (T2)
-    Multi-buffer/window    ░░░░       deferred (T2)
+    Multi-buffer/window    ███░       T2 Q3 measured (win1-8, buf10-100,
+                                      spot8x100)
     xref/imenu/eglot       ░░░░       deferred (T2/T3)
     Org/Dired/Magit/Term   ░░░░       deferred (T3)
     Mixed workload         ░░░░       T3 (IDE-MIXED-01 trace)
@@ -130,7 +131,76 @@ Line format:
 ## 6. Status
 
     [x] Phase 1 (T1) designed + executed 2026-08-25 (REPORT section 30)
-    [ ] Phase 2 (T2)
+    [x] Phase 2 (T2) attribution phase -- contract below, executed
+        2026-08-25 (REPORT section 31; verdict table
+        bench/eipb/phase2/report/PHASE2.md).  B/C rows on the
+        mid-buffer D-gap signal: PENDING (next matrix run)
     [ ] Phase 3 (T3)
     [ ] Phase 4 (T4)
     [ ] Phase 5 (T5)
+
+## 7. Phase 2 contract -- tail-latency attribution (frozen 2026-08-25)
+
+Phase 2 is NOT "more benchmarks".  It answers three frozen questions
+about WHERE user-perceivable stalls originate in Emacs core services.
+Measurement and attribution only: no redisplay/GC/ENCA architecture
+changes are authorized by this phase.
+
+### Q1 -- Is font-lock an editing tail-latency source?
+
+Full user chain measured per keystroke:
+
+    keypress -> buffer change -> fontification -> redisplay -> visible
+
+Two arms per cell:
+  NATURAL : insert + (redisplay t); jit-lock runs as it would for a
+            real user (visible region fontified inside redisplay).
+  DECOMP  : insert; (jit-lock-fontify-now around-point) timed;
+            then (redisplay t) timed.  Segments attributed separately.
+
+Languages: c-mode, emacs-lisp-mode, python-mode, org-mode,
+fundamental (control).  Sizes: 100KB + 1MB all languages; 10MB for
+c-mode + fundamental only (runtime cap, documented scope cut;
+100MB deferred to T3).  Point kept on-screen so jit-lock cannot
+defer work to stealth timers.
+
+Metrics: buffer_ms / fontify_ms / red_ms / total_ms distributions;
+stall counters (ops >10ms / >50ms / >100ms); gcs-done delta per cell.
+
+### Q2 -- Does GC pause actually enter the user-perceivable path?
+
+Protocol: 1000 single-char keypress->visible ops at EOB of a fresh
+1MB fundamental buffer (font-lock excluded by design).  Arms:
+
+  NOGC     gc-cons-threshold raised + pre-GC; expect zero GCs
+  NATURAL  gc-cons-threshold = 20000; GCs fire naturally mid-typing
+  FORCED   explicit (garbage-collect) every 25th op, INSIDE the
+           timed window
+
+Verdict rule: if NATURAL/FORCED tails (p99/max, stall counts) exceed
+NOGC materially, GC IS a user-path stall source with magnitude =
+delta.  If pauses land only outside interactive windows, priority
+drops.  gcs-done delta emitted per arm as protocol verification.
+
+### Q3 -- Do multi-buffer / multi-window change redisplay behavior?
+
+tty session; window scaling capped at 8 (16 exceeds sane tty width;
+documented cut).  Matrix sampling:
+
+  windows {1,2,4,8} x fixed 1 buffer:
+      noop-redisplay, edit+visible, popup+visible, scroll x10
+  buffers {1,10,100} x fixed 1 window:
+      switch-buffer cycle (each switch timed), edit+visible
+  spotlight: 8 windows x 100 buffers:
+      edit+visible, popup+visible, switch cost
+
+(memory-limit) KB emitted at each section boundary.
+
+### Products
+
+    bench/eipb/phase2/eipb_p2_core.el   harness (FL / GCPATH / WB)
+    bench/eipb/phase2/eipb_p2_run.sh    runner
+    bench/eipb/phase2/report/PHASE2.md  Q1-Q3 verdict table
+    bench/results/eipb_t2.log           raw lines (EIPB2|...)
+
+Line format: EIPB2|<build>|<cell>|<metric>|<value>
