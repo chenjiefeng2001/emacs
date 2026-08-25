@@ -85,6 +85,28 @@ cell, only vanilla-A off-band in the slow direction = run-order
 artifact).  ENCA cleared; no fork-base effect.  Details:
 bench/eipb/phase2/report/PHASE2_1.md (REPORT section 32).
 
+## Tier 3 user-path coverage (Phase 3, filled 2026-08-25)
+
+Source: bench/results/eipb_t3.log (12 sessions = A/B/C/D x 3,
+shuffled orders); verdicts in bench/eipb/phase3/report/PHASE3.md.
+Pooled means; observed differences only (doctrine 8).
+
+| cell                        | headline (all builds)                  |
+|-----------------------------|----------------------------------------|
+| isearch steady key p50      | 0.11-0.16 ms @100KB AND @1MB           |
+| isearch first key (BOB scan)| 1.6-2.8 ms @100KB; 7-16 ms @1MB        |
+| open io segment             | ~4 ms/MB warm, linear, same band x4    |
+| open idle drain (sit-for 0) | 3-15 MICROseconds                      |
+| elisp cold fontify on open  | 100KB ~0.4-1.0 s; 1MB ~5.5-6.5 s       |
+| gcs_delta protocol check    | EXACT match across builds (117/117/117/117) |
+
+New stalls found: NONE at <=10MB warm scale -- file I/O and isearch
+join the cleared column.  Proven interactive stalls remain: c-mode
+jit chunks >=100ms (T2), large-heap GC pauses 190-320ms (T1),
+multi-window repaint multiplication (~45-47ms @8 panes, T2 Q3).
+Pending: cold-cache opens, IDE-MIXED-01, xref/imenu, org/dired,
+GUI variants.
+
 ## Notes
 
 - * = noise flag. Startup walls at the 100-300ms scale moved >2x

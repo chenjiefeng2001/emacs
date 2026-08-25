@@ -39,6 +39,12 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
    that vanished under interleaving.  Single-session cross-build
    deltas below ~30% are UNRESOLVABLE in the current tty/WSL rig and
    must be reported as PENDING, never as regressions.
+8. **Attribution gate, strengthened** (added 2026-08-25): a causal
+   report "difference caused by component X" requires ALL of:
+   same workload + controlled machine state + randomized build
+   order + >=N independent sessions + effect size above the noise
+   band.  Anything less may ONLY report "observed difference";
+   causal language without the full set violates this gate.
 
 ## 2. Coverage map (status 2026-08-25)
 
@@ -48,9 +54,9 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
     LSP transport          █████      EVS-4.3/EVS-5.4
     Buffer editing         ███░       P0 baseline + EIPB T1
     Redisplay (tty)        ██░░       EVS-4.4 + P0 tty + EIPB T1
-    Search/regexp          ██░░       P0 batch + EIPB T1
+    Search/regexp          ███░       P0 batch + T1 sweeps + T3-B isearch
     Diagnostics            ██░░       EVS-4.3 storm-real
-    Large-file editing     ███░       P0 1MB only -> T1 extends
+    Large-file editing     ███░       P0 1MB + T1 + T3-A open-chain
     GC                     ██░░       P0 gc-full + T1 + T2 Q2 (user-path)
     Startup                █░░░       ad-hoc -> T1 formalizes
     Undo/redo              ░░░░       -> T1
@@ -58,7 +64,8 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
     Lisp compilation       ░░░░       deferred (T2)
     Syntax/font-lock       ███░       T2 Q1 chain measured (c/org/elisp/
                                       python/plain, 100KB-10MB)
-    File I/O               ░░░░       deferred (T2)
+    File I/O               ███░       T3-A open chain (io/decode/mode/
+                                      fontify/redisplay/idle)
     Multi-buffer/window    ███░       T2 Q3 measured (win1-8, buf10-100,
                                       spot8x100)
     xref/imenu/eglot       ░░░░       deferred (T2/T3)
@@ -143,7 +150,10 @@ Line format:
     [x] Phase 2.1 B/C attribution -- mid-buffer signal CLEARED
         (session order artifact, not ENCA; REPORT section 32,
         bench/eipb/phase2/report/PHASE2_1.md)
-    [ ] Phase 3 (T3)
+    [~] Phase 3 (T3) user-path coverage -- T3-A file open chain +
+        T3-B interactive isearch executed 2026-08-25 (REPORT
+        section 33); remaining T3 items (IDE-MIXED-01 trace,
+        xref/imenu, org/dired) PENDING
     [ ] Phase 4 (T4)
     [ ] Phase 5 (T5)
 

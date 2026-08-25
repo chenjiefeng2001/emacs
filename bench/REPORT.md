@@ -985,3 +985,19 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 
 ### 32.3 制度产出
 ① 未来所有 tier 运行强制 round-robin 交错构建,禁固定顺序(EIPB.md 学说增补);② 尾部指标(p95/max)单会话置信不足,跨构建尾部比较一律待多会话;③ tag `enca-eipb-phase2-attribution-closure` 由本节授权,随 Phase 2.1 提交落地。
+
+
+## 33. P0-EIPB Phase 3 — 用户路径覆盖扩展:T3-A 文件打开链 + T3-B 交互 isearch(2026-08-25)
+
+### 33.1 执行概况
+覆盖阶段而非优化阶段。4 构建 × 3 独立 session、每轮 `shuf` 随机顺序(学说 7+8),12 session ×79 行完全对称、零 FATAL。文件打开链五段分解(read+decode / mode / fontify / redisplay / idle-drain),isearch 按键分布(hit/miss × 100KB/1MB)。原始数据 results/eipb_t3.log,判定书 bench/eipb/phase3/report/PHASE3.md。
+
+### 33.2 判定
+- **isearch 增量按键实际免费**:稳态 p50 0.11–0.16ms,两尺寸、命中/未命中、四构建全部同带;唯一尾部是首键的 BOB 全扫(100KB ≈1.6–2.8ms;1MB ≈7–16ms,单次/搜索)。≤1MB 缓冲下 isearch 不构成交互延迟风险;
+- **文件打开链无可感知停顿(≤10MB 温缓存)**:io 段 ~4ms/MB 线性且四构建同带;链中最贵段是 fontify(与 T2 结论衔接);idle drain 仅微秒级——redisplay 返回后用户路径里没有隐藏成本;
+- **gcs_delta 协议对称性完美**:elisp/1MB 四构建均恰 117 次 GC —— 分配行为跨构建逐字节确定,兼作 allocator 一致性检查;
+- **ENCA 无系统性方向**:所有 >30% 波动标志都被相邻指标/相邻 rep 反向抵消,按学说 8 全部记为 observed difference,不作因果表述;
+- 交互延迟地图现状:已证实的毫秒级停顿仍然只有 T2 的 c-mode jit 块(≥100ms)、T1 大堆 GC 暂停(190–320ms)、T2 Q3 多窗重绘乘子(~45–47ms@8 窗)。file I/O 与 isearch 进入"已排除"列。
+
+### 33.3 边界与遗留
+温页缓存口径(真冷缓存需 drop-cache 权限,deferred);elisp 臂封顶 1MB(10MB elisp 冷全量 fontify 单次 ~60s+ 会淹没 session 预算,T2 已有该 regime 合成数据);首键指标 n=3 过薄,尾部结论需 ≥10 session;shuf 多行 marker 为已知无害怪癖,顺序可由日志行序列恢复。T3 余项:IDE-MIXED-01 轨迹、xref/imenu、org/dired 类工作流。
