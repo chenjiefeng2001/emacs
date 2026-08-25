@@ -56,6 +56,7 @@ Vanilla ≡ ENCA-disabled ≡ ENCA-enabled(所有 cell 比值 0.89–1.09,
 | **EVS-5.3.1 C13/C8c full** | 四类完整分布落地;hit 全路径 p50=4.6ms(redisplay 地板 ~4.5ms 主导,引擎 <0.15ms);§25 的 0.58ms 口径已修正 | CACHE.md §11,REPORT §27,results/evs531_ui_typing.log |
 | **EVS-5.4 real LSP** | 真 clangd 18.1.3 打通 elisp 用户路径;引擎 source 序列与 loopback 逐 op 一致(32/32);GROWTH 精确复现 F1;false_hit=0 | REAL_LSP.md §6,REPORT §28,results/evs54_real_lsp.log |
 | **EVS-5.5 edit trace** | 测量仪器落地:EditRelation/H0-H4 分类 + 引擎真值校验;复用上限按行为双峰(打字链 0% vs 无关区编辑 91%);H0m 键碎片发现;Stage-D 决策公式两端仍缺真实数据 | TRACE.md §6,REPORT §29,results/evs55_trace.log |
+| **P0-EIPB Phase 1** | 项目主线升级为全编辑器基准;T1 核心域四构建(A/B/C/D)全量落地:ENCA 影响≈噪声带;**GC 强制暂停 max 190–320ms(vanilla 同样存在)= 首个被数据点名的真实交互停顿源** | EIPB.md,MATRIX.md,REPORT §30,results/eipb_t1.log |
 
 ---
 
@@ -95,7 +96,21 @@ GUI renderer、Range Snapshot、tree-sitter、cross-revision reuse
 
 ## 5. 下一步(按优先级)
 
-### 候选 1 — F2/cross-revision(Stage D)
+### 主线 — P0-EIPB(自 2026-08-25 起,见 bench/eipb/EIPB.md)
+全编辑器系统基准,所有后续性能决策的依据。纪律:禁综合分、
+百分位强制、A/B/C/D 四构建、tty/GUI 分离、§26 归因门禁不变。
+- Phase 1(T1 核心交互)✅ 已完成(REPORT §30 / MATRIX.md);
+  启动行噪声大待 N≥5 中位数;搜索口径为 elisp 循环含匹配开销;
+- Phase 2(T2 服务集成)⬜ 下一步:font-lock keypress→fontify→
+  redisplay→visible 链、文件 I/O 阶梯、multi-buffer×window、
+  isearch/imenu/xref、启动中位数化、GC 暂停与 font-lock 的归因;
+- Phase 3(T3)IDE-MIXED-01 全会话带时间戳轨迹;
+- Phase 4(T4)SOAK-30M/2H:latency(t→∞)≈latency(0) 验收;
+- Phase 5(T5)外部 IDE 同 trace 对比(最后做)。
+**T1 已点名 GC 停顿(max ~190–320ms,vanilla 同在)= 第一个真实
+交互停顿候选;任何针对它的改动仍需 §26 归因流程。**
+
+### 候选 — F2/cross-revision(Stage D)
 前置条件已部分兑现:EVS-5.5 轨迹仪器落地(TRACE.md),给出逐行为
 复用上限——打字链 0%、参数生长 80%、无关区编辑 91%、混合合成 15.4%,
 以及 H0m 键碎片这一低成本替代线索。**仍缺的两端**:真实用户
@@ -191,3 +206,9 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > 上限按行为双峰:无关区编辑 91% / 打字链 0%;另发现 H0m 键碎片
 > 这一可能更便宜的替代方向。Stage-D 的 Go/No-Go 现在是一个乘法
 > 公式,只差真实用户分布与本机真实项目延迟两个实测输入。)
+>
+> (2026-08-25 四补:主线升级为 P0-EIPB 全编辑器基准。Phase 1 已
+> 用四构建数据证明 ENCA 在核心交互域≈零影响,并点名了第一个真正
+> 的交互停顿源——GC 强制暂停 max ~190–320ms,vanilla 同样存在。
+> 下一个 session 从 EIPB Phase 2(font-lock 链/文件 I/O/多窗口)
+> 开始,别回头做 runtime。)

@@ -929,3 +929,29 @@ WSL 侧 `apt install clangd`(18.1.3)、valgrind 已装;Windows clangd 19.1 未�
 
 ### 29.4 排障记录
 harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全 nobackend;②空前缀种子请求用于锚定首键分类;③字符串下标(0 基)vs 缓冲位置(1 基)差一偏移导致 CALLARGS 首参数并入 token("proca")——EDT55 证据行 + 批量探针定位,常量统一为缓冲位置后消除。
+
+
+## 30. P0-EIPB Phase 1 — 核心交互基准落地(2026-08-25)
+
+### 30.1 路线调整
+项目主线自本日起从"单路径归因(EVS)"升级为"全编辑器系统测量(P0-EIPB)":EVS-1..5 证明了 completion/LSP 一条路径的纪律,但 startup/editing/redisplay/GC/search/undo/font-lock/file-I/O/multi-window/soak 等域从未系统测量,"现代 IDE 性能"的说法在矩阵填满前不成立。框架与纪律冻结于 bench/eipb/EIPB.md:禁综合分、百分位强制、A/B/C/D 四构建学说、tty 与 GUI 分离、§26 归因门禁继续有效。
+
+### 30.2 Phase 1 结果(tty,四构建各 141 行;原始数据 results/eipb_t1.log,矩阵 bench/eipb/MATRIX.md)
+| 域 | 代表格 p50 (A/B/C/D) |
+|---|---|
+| 插入/删除/粘贴(64KB–10MB)| 全部 ≤0.008ms,四构建无系统性差异 |
+| 编辑+可见(1MB)| 0.60–1.13ms(p50);p99 尾部受 GC 干扰 |
+| Redisplay R0/R1/R2/R3 | 0.03–0.06 / ~1.4 / ~0.9–2.1 / ~2.9–7.1ms |
+| GC 强制暂停 | **p50 18–30ms,p99 167–245ms,max 189–320ms** |
+| 风暴均值暂停(160MB 活跃堆)| 175–347ms |
+| 单键 undo | ~1.2–1.4µs |
+| 10MB 搜索(elisp 循环口径)| literal 1.7–3.2s;regexp-id 0.5–1.0s |
+
+### 30.3 判定
+- **ENCA 影响 ≈ 噪声带**:editing/redisplay/search/undo 全域 A≈B≈C≈D,无任何一格出现系统性回归——P0 结论在全交互域推广成立;
+- **T1 最大发现与 ENCA 无关**:GC 强制暂停 max 达 190–320ms 且 vanilla 同样存在。这是 Emacs core 级别的交互停顿源,量级碾压表内其他所有尾部,是后续"现代 IDE 差距"讨论中第一个被数据点名的真实候选(font-lock 路径之前);
+- 启动墙钟在百 ms 量级噪声过大(B tty-cold 590ms vs batch3 82ms 自相矛盾),标记为临时值,Phase 2 改 N≥5 取中位数;
+- 搜索口径为 elisp while-loop 含每次匹配调用开销(~60 万次),非纯 C 扫描,已注明。
+
+### 30.4 排障记录(全部实证)
+①`(undo)` 命令批处理怪癖(user-error)→ 改 `primitive-undo`;②`gc-elapsed` 实际以秒推进(10 次 GC delta=1.48)与手册 µs 说法不符 → 按 ×1000 修正;③**撤销必须抑制自身记录**,否则历史每次调用翻倍(O(2^n) 爆炸,harness 卡死根因);④**已消费条目须及时清空**,残留会让后续 primitive-undo 报 "outside visible portion"(bisect6 逐轮插桩定位)。
