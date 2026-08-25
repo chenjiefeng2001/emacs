@@ -151,9 +151,10 @@ Line format:
         (session order artifact, not ENCA; REPORT section 32,
         bench/eipb/phase2/report/PHASE2_1.md)
     [~] Phase 3 (T3) user-path coverage -- T3-A file open chain +
-        T3-B interactive isearch executed 2026-08-25 (REPORT
-        section 33); remaining T3 items (IDE-MIXED-01 trace,
-        xref/imenu, org/dired) PENDING
+        T3-B interactive isearch executed (REPORT section 33);
+        IDE-MIXED-01 trace executed 2026-08-25 (REPORT section 34).
+        Remaining: org folding/export, xref/imenu command latency,
+        dired; then T4 soak
     [ ] Phase 4 (T4)
     [ ] Phase 5 (T5)
 

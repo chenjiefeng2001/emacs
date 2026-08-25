@@ -1001,3 +1001,18 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 
 ### 33.3 边界与遗留
 温页缓存口径(真冷缓存需 drop-cache 权限,deferred);elisp 臂封顶 1MB(10MB elisp 冷全量 fontify 单次 ~60s+ 会淹没 session 预算,T2 已有该 regime 合成数据);首键指标 n=3 过薄,尾部结论需 ≥10 session;shuf 多行 marker 为已知无害怪癖,顺序可由日志行序列恢复。T3 余项:IDE-MIXED-01 轨迹、xref/imenu、org/dired 类工作流。
+
+
+## 34. P0-EIPB Phase 3.1 — IDE-MIXED-01 脚本会话轨迹(2026-08-25)
+
+### 34.1 执行概况
+冻结脚本:开项目(20 文件混合语言)→ 切换 → c-mode 打字 → capf 补全 → 滚动 → isearch → 编辑/删除 → undo → 再补全 → 窗口循环 → 保存 → idle。逐动作时间戳轨迹(日志序=时序),4 构建 ×2 轮随机顺序(r1:D A B C;r2:A D C B),205 行/session 完全对称、零 FATAL、零补全错误。原始数据 results/eipb_t31.log,判定书 bench/eipb/phase3/report/PHASE3_1.md。
+
+### 34.2 判定
+- **组合未暴露新瓶颈**:所有动作中位数 ≤ 其单路径对应值;已知停顿恰好出现在预测位置(c-jit 打字 p95 ~93–123ms 全构建一致;打开尾部的秒级段 = c 文件冷 fontify 而非 I/O)——真实会话成本 = 各部分成本之和;
+- **地图新增覆盖项:native completion-at-point 整轮 ≈45–70ms**(含 Completions 窗口渲染),是 GC/fontify 之外测得的最大稳态交互延迟;覆盖数据而非缺陷判定,LSP 类后端已由 EVS 单独测量;
+- **ENCA 无方向性信号**:散点尾部尖峰(isearchkey B 664ms×1、wincycle D 53ms×1、capf2 C 339ms×1)n≤10 无跨构建模式,PENDING 多 session;session 墙钟 A +18%(n=2 且恰占前位)仅记 observed difference;
+- undo 中位 0.21ms、idle drain 0.19–0.22ms —— 会话深处仍无隐藏成本。
+
+### 34.3 排障记录(smoke 三迭代全部实证)
+① kill-buffer 对修改过的文件缓冲弹交互确认 → 脚本会话在 summary 发出后挂死至超时 → 清 modified 标志+unlock+静音查询函数;② primitive-undo 按"边界段"消费,脚本操作无边界致一次吞光(undostep n=1)→ eipb3--op 每操作后追加 undo-boundary(同时更贴近真实命令粒度);③ dabbrev-expand 在"同前缀+上下文擦除"重放下暴露内部状态机崩坏(search-failed / wrong-type-argument 两轮实证)→ 弃用,换官方无状态入口 completion-at-point(elisp capf 收集缓冲内标识符,fn-NNNN 天然候选)。

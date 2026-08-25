@@ -107,6 +107,21 @@ multi-window repaint multiplication (~45-47ms @8 panes, T2 Q3).
 Pending: cold-cache opens, IDE-MIXED-01, xref/imenu, org/dired,
 GUI variants.
 
+## Tier 3.1 IDE-MIXED-01 (2026-08-25)
+
+Source: bench/results/eipb_t31.log (8 sessions = A/B/C/D x 2,
+shuffled orders); verdicts in bench/eipb/phase3/report/PHASE3_1.md.
+Composition validated: session cost = sum of parts; no emergent
+interaction stall.  New coverage entry:
+
+| action                    | p50 ms (A/B/C/D)            |
+|---------------------------|-----------------------------|
+| completion-at-point round | 68 / 46 / 55 / 58 (~50ms typical, incl. Completions render) |
+| typevis c-mode mid-burst  | 17 / 12 / 11 / 10           |
+| undo step mid-session     | 0.21 flat                   |
+
+Tails stay thin-n; ENCA shows no direction on any action.
+
 ## Notes
 
 - * = noise flag. Startup walls at the 100-300ms scale moved >2x
