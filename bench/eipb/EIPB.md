@@ -68,8 +68,12 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
                                       fontify/redisplay/idle)
     Multi-buffer/window    ███░       T2 Q3 measured (win1-8, buf10-100,
                                       spot8x100)
-    xref/imenu/eglot       ░░░░       deferred (T2/T3)
-    Org/Dired/Magit/Term   ░░░░       deferred (T3)
+    xref/imenu/eglot       ███░       T3.2 imenu/xref measured (eglot
+                                      covered by EVS-4.x); T3 remainder:
+                                      dired only
+    Org/Dired/Magit/Term   ██░░       org cycle/global/nav + fontify
+                                      measured (T3.2); dired -> T3 tail;
+                                      magit/term deferred
     Mixed workload         ░░░░       T3 (IDE-MIXED-01 trace)
     Soak 30m/2h            ░░░░       T4
     External IDE ref       ░░░░       T5 (last; same-trace rule)
@@ -113,7 +117,11 @@ user-path metrics (action->visible, action->idle).
 ### T4 -- Soak (Phase 4)
 SOAK-30M / SOAK-2H running T3-style mixed load; track RSS, heap,
 GC pause drift, latency drift; acceptance: p99(t_end) <= 2x p99(t_0)
-and no monotonic growth in RSS after warmup.
+and no monotonic growth in RSS after warmup.  Additional frozen
+metric (added 2026-08-26): **tail amplification ratio** =
+p99(last 10 min) / p99(first 10 min) per action class -- long-run
+failures usually show as tail growth with flat medians (cache
+non-eviction, snapshot retention, fragmentation, GC pressure).
 
 ### T5 -- External reference (Phase 5, LAST)
 Same-trace comparison against VS Code/JetBrains on identical scripted
@@ -151,10 +159,9 @@ Line format:
         (session order artifact, not ENCA; REPORT section 32,
         bench/eipb/phase2/report/PHASE2_1.md)
     [~] Phase 3 (T3) user-path coverage -- T3-A file open chain +
-        T3-B interactive isearch executed (REPORT section 33);
-        IDE-MIXED-01 trace executed 2026-08-25 (REPORT section 34).
-        Remaining: org folding/export, xref/imenu command latency,
-        dired; then T4 soak
+        T3-B isearch (REPORT 33); IDE-MIXED-01 (REPORT 34);
+        xref/imenu + org executed 2026-08-26 (REPORT 35).
+        Remaining: dired only; then T4 soak
     [ ] Phase 4 (T4)
     [ ] Phase 5 (T5)
 

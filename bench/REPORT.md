@@ -1016,3 +1016,19 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 
 ### 34.3 排障记录(smoke 三迭代全部实证)
 ① kill-buffer 对修改过的文件缓冲弹交互确认 → 脚本会话在 summary 发出后挂死至超时 → 清 modified 标志+unlock+静音查询函数;② primitive-undo 按"边界段"消费,脚本操作无边界致一次吞光(undostep n=1)→ eipb3--op 每操作后追加 undo-boundary(同时更贴近真实命令粒度);③ dabbrev-expand 在"同前缀+上下文擦除"重放下暴露内部状态机崩坏(search-failed / wrong-type-argument 两轮实证)→ 弃用,换官方无状态入口 completion-at-point(elisp capf 收集缓冲内标识符,fn-NNNN 天然候选)。
+
+
+## 35. P0-EIPB Phase 3.2 — xref/imenu 命令延迟 + org 工作负载(2026-08-26)
+
+### 35.1 执行概况
+4 构建 ×2 轮随机顺序,8 session ×47 行完全对称、零 FATAL;协议确定性再次完美(xr/scan matches_mean 四构建均 = 1068.0000)。原始数据 results/eipb_t32.log,判定书 bench/eipb/phase3/report/PHASE3_2.md。
+
+### 35.2 判定(地图更新)
+- **imenu 首次建索引入列停顿**:30KB elisp / 20KB c 的冷构建 ≈300–560ms(一次性、每缓冲首次),缓存重建 ~0.25ms;goto 导航自由(0.21–0.42ms);
+- **org/global-cycle 入列停顿**:2000 标题整缓冲可见性扫描 p50 ≈0.42–0.56s、p95 至 1.2s —— 与多窗重绘同档,vanilla 同形 → Emacs core 属性;
+- **交互级 org 安全**:子树折叠 p50 ~4.3–5.0ms、标题导航 ~0.8ms;
+- **xref 项目扫描**(grep 后端)≈67–98ms p50,D/A 1.5x 散布 n=6 不可分辨 → observed difference;
+- **ENCA 全程无方向**;org 冷 fontify 300KB ≈1.7–3.2s(n=2 噪声带内)与 T2 org 标度衔接。
+
+### 35.3 排障记录(probe 链全程实证)
+① `xref-matches-in-directory` 的 FILES 是 **find-glob 语义**而非正则:".*" 只匹配点文件(静默 0 命中)→ 改 "*";探针链:最小用例 → *xref-grep* 原始缓冲 → 手工管线 → glob 语义定位;② 手工复刻 grep 管线漏掉函数内部的 `<C> → <C> -E` 模板改写,BRE 下 `\[` 匹配字面括号 —— 探针伪影记录;③ 会话在全部 teardown 探针通过后仍挂死于 kill-emacs 内部(process-list 为空!)→ 以 confirm-kill-processes nil + 成功臂内退出缓解,**根因未解**,标记给 T4 soak harness(需大量干净退出)。

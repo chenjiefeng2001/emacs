@@ -122,6 +122,27 @@ interaction stall.  New coverage entry:
 
 Tails stay thin-n; ENCA shows no direction on any action.
 
+## Tier 3.2 xref/imenu + org (2026-08-26)
+
+Source: bench/results/eipb_t32.log (8 sessions = A/B/C/D x 2,
+shuffled); verdicts in bench/eipb/phase3/report/PHASE3_2.md.
+pooled p50 ms (format A/B/C/D):
+
+| cell                | p50 (A/B/C/D)            | class     |
+|---------------------|--------------------------|-----------|
+| imenu cold index    | 0.27/0.25/0.24/0.26 cached; first-build ~300-560 one-shot | **stall** |
+| im/goto             | 0.21-0.42 all            | closed    |
+| xr/scan (grep)      | 67/90/83/98              | mapped    |
+| org/cycle subtree   | 4.7/4.3/4.5/5.0          | closed    |
+| org/global sweep    | 500/423/499/561 (p95 to 1197) | **stall** |
+| org/nav             | 0.8 flat                 | closed    |
+| org cold fontify    | 1744/2740/3161/1897 (1-shot, n=2) | mapped |
+
+Protocol check: xr matches_mean = 1068.0000 in every build.
+Atlas after 3.2 -- stalls: c-jit >=100ms; GC 190-320ms;
+multi-window ~45ms; imenu cold ~300-560ms; org/global ~0.5s.
+Pending: dired, cold-cache opens, GUI, soak (T4).
+
 ## Notes
 
 - * = noise flag. Startup walls at the 100-300ms scale moved >2x
