@@ -1032,3 +1032,18 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 
 ### 35.3 排障记录(probe 链全程实证)
 ① `xref-matches-in-directory` 的 FILES 是 **find-glob 语义**而非正则:".*" 只匹配点文件(静默 0 命中)→ 改 "*";探针链:最小用例 → *xref-grep* 原始缓冲 → 手工管线 → glob 语义定位;② 手工复刻 grep 管线漏掉函数内部的 `<C> → <C> -E` 模板改写,BRE 下 `\[` 匹配字面括号 —— 探针伪影记录;③ 会话在全部 teardown 探针通过后仍挂死于 kill-emacs 内部(process-list 为空!)→ 以 confirm-kill-processes nil + 成功臂内退出缓解,**根因未解**,标记给 T4 soak harness(需大量干净退出)。
+
+
+## 36. P0-EIPB Phase 3.3 — dired 覆盖 + T3 收官、Atlas 冻结 v1(2026-08-26)
+
+### 36.1 执行概况
+最小冻结集:空/小(20)/大(2000)目录进入、refresh、create/rename/delete(+revert)、dired↔file 跳转。4 构建 ×2 轮随机,8 session ×37 行完全对称、零 FATAL。原始数据 results/eipb_t33.log,判定书 bench/eipb/phase3/report/PHASE3_3.md。
+
+### 36.2 判定
+- **A≈B≈C≈D 全格成立 → dired = mapped / 无 ENCA 信号**;
+- 新测绘条目:进入 2000 文件大目录 ≈177–234ms(一次性);小目录 ~10ms;变更类(create/rename/delete 含 revert+渲染)全部 ~8–9ms;跳转 ~2.3ms;
+- empty 目录的 p95/max ~0.5–0.7s 为 dired 机械首次冷启动(ls 子进程+模式建立),四构建同形 = 会话位置伪影,p50 行才是稳态真值。
+
+### 36.3 T3 收官 —— Atlas 冻结 v1
+覆盖缺口清零(dired 落地)。**停顿列五项**:c-jit ≥100ms、大堆 GC 190–320ms、多窗重绘 ~45–47ms@8窗、imenu 冷索引 ~300–560ms、org/global sweep ~0.5s。**关闭列**:编辑/undo/isearch/file-I-O/LSP/completion transport/mixed 组合/xref/capf/dired 全操作/org 交互级。明确延期(非待办):真冷缓存打开、GUI 变体、magit 类流。
+**Phase 4 门禁**:SOAK 必须回答"关闭行是否持续关闭、停顿行是否保持稳定"(30M→2H),且 p32 的 kill-emacs 退出挂死列为 **T4 必须归因项**,不得以"主体没崩"判绿;RSS 判定按斜率(slope)而非首尾相减,区分合法增长与无界增长。

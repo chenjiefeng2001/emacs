@@ -143,6 +143,45 @@ Atlas after 3.2 -- stalls: c-jit >=100ms; GC 190-320ms;
 multi-window ~45ms; imenu cold ~300-560ms; org/global ~0.5s.
 Pending: dired, cold-cache opens, GUI, soak (T4).
 
+## Tier 3.3 dired + T3 CLOSURE (2026-08-26)
+
+Source: bench/results/eipb_t33.log (8 sessions = A/B/C/D x 2,
+shuffled); verdicts in bench/eipb/phase3/report/PHASE3_3.md.
+pooled p50 ms (A/B/C/D):
+
+| cell             | p50 (A/B/C/D)          | class  |
+|------------------|------------------------|--------|
+| dd/open-big(2000)| 234/177/222/226        | mapped |
+| dd/open-small    | ~10 flat               | closed |
+| dd/refresh       | 7.1/7.3/7.5/8.4        | closed |
+| dd/create-rename-delete | ~8-9 all builds | closed |
+| dd/jump          | ~2.3 flat              | closed |
+
+**A ~= B ~= C ~= D everywhere: no ENCA signal in dired.**
+
+===============================================================
+EIPB LATENCY ATLAS -- FROZEN v1 (T3 closure, 2026-08-26)
+
+CLOSED: buffer edit / undo / isearch incremental / file open chain /
+LSP transport / completion transport / IDE mixed composition /
+xref scan / capf round / dired ops / interactive org.
+
+MAPPED: capf round ~45-70ms; xref scan ~70-100ms; dired big-dir
+~0.2s one-shot; org cold fontify ~1.7-3.2s @300KB.
+
+STALLS (Emacs-core properties, ENCA-independent):
+  c-mode jit chunks        >=100 ms
+  large-heap GC pause      190-320 ms
+  multi-window repaint     ~45-47 ms @8 panes
+  imenu cold index         ~300-560 ms one-shot
+  org global sweep         ~0.5 s @2000 headings
+
+DEFERRED BY DECISION: cold-cache opens / GUI variants / magit flows.
+Phase 4 gate: soak must prove closed rows stay closed and stall rows
+stay stable over 30min/2h (slope-based RSS, tail amplification ratio,
+kill-emacs exit hang attribution REQUIRED).
+===============================================================
+
 ## Notes
 
 - * = noise flag. Startup walls at the 100-300ms scale moved >2x

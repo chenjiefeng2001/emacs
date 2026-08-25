@@ -68,12 +68,10 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
                                       fontify/redisplay/idle)
     Multi-buffer/window    ███░       T2 Q3 measured (win1-8, buf10-100,
                                       spot8x100)
-    xref/imenu/eglot       ███░       T3.2 imenu/xref measured (eglot
-                                      covered by EVS-4.x); T3 remainder:
-                                      dired only
-    Org/Dired/Magit/Term   ██░░       org cycle/global/nav + fontify
-                                      measured (T3.2); dired -> T3 tail;
-                                      magit/term deferred
+    xref/imenu/eglot       ████       T3.2 imenu/xref measured; eglot
+                                      covered by EVS-4.x -- CLOSED
+    Org/Dired/Magit/Term   ███░       org + dired measured (T3.2/3.3);
+                                      magit/term deferred by decision
     Mixed workload         ░░░░       T3 (IDE-MIXED-01 trace)
     Soak 30m/2h            ░░░░       T4
     External IDE ref       ░░░░       T5 (last; same-trace rule)
@@ -158,10 +156,11 @@ Line format:
     [x] Phase 2.1 B/C attribution -- mid-buffer signal CLEARED
         (session order artifact, not ENCA; REPORT section 32,
         bench/eipb/phase2/report/PHASE2_1.md)
-    [~] Phase 3 (T3) user-path coverage -- T3-A file open chain +
-        T3-B isearch (REPORT 33); IDE-MIXED-01 (REPORT 34);
-        xref/imenu + org executed 2026-08-26 (REPORT 35).
-        Remaining: dired only; then T4 soak
+    [x] Phase 3 (T3) user-path coverage CLOSURE -- T3-A file open
+        chain + isearch (REPORT 33); IDE-MIXED-01 (REPORT 34);
+        xref/imenu + org (REPORT 35); dired + atlas freeze v1
+        (REPORT 36, 2026-08-26).  Deferred by decision: cold-cache
+        opens, GUI variants, magit-class flows.
     [ ] Phase 4 (T4)
     [ ] Phase 5 (T5)
 
