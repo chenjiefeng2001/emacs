@@ -970,3 +970,18 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 
 ### 31.3 排障记录(session-2/3 全部实证)
 ① 上 session 死因:磁盘 harness 是半成品重构(`eipb2--timed-reps` 被调用未定义、`wb-make-buffers` 命名错位),且 FL 单节 420s 超时杀死后续全部问题 → 本轮补齐定义、逐格 condition-case 隔离、FL/GCPATH/WB 分节独立超时;② plain 控制臂崩溃根因:**上游 jit-lock--run-functions 在 jit-lock-functions 为空时对 (min nil beg) 求值崩溃**(batch 复现,vanilla 同样)→ 控制臂跳过 jit 调用并留痕;③ popup 数据整列缺失:辅助函数经参数 push 只改局部形参(lexical-binding)→ 改返回值传递;④ GCPATH 臂表引号列表内 `(* 64 1024 1024)` 不求值 → 字面量;⑤ script(1) pty 默认高度装不下 8 窗(window-min-height)→ harness 开局 set-frame-height 50;⑥ wsl.exe 会话退出会杀裸 nohup 后台任务 → setsid+`</dev/null` 启动器。
+
+
+## 32. P0-EIPB Phase 2.1 — mid-buffer 信号 B/C 归因闭环(2026-08-25)
+
+### 32.1 执行概况
+针对 §31 遗留的 PENDING-B/C-CHECK 信号(mid-buffer 编辑+可见 D 比 A 高 1.3–3.8x):A/B/C/D 四构建、两轮交错(A,B,C,D ×2)、GC 钉死(64MB 阈值+格前回收)、纯 fundamental、确定性输入轨迹,240 行零 FATAL,墙钟 135s。原始数据 results/eipb_p21.log,判定书 bench/eipb/phase2/report/PHASE2_1.md。
+
+### 32.2 判定
+- **Phase-2 信号不复现**:六格中位 D/A 全落 0.66–1.17,无任何 D 特异性超标;
+- **既非 ENCA 也非 fork 底座**:B≈C≈D 三者每格聚簇,唯一离群的是 vanilla A 且方向为更慢 —— 按 §31 冻结决策树归入"测量环境"分支,定性为**运行顺序伪影**(Phase 2 每节 D 先 A 后;Phase 2.1 中 A 恒占第 1 位,位置而非构建身份跟踪偏差);
+- 可声明结论保持最小:**运行顺序受控后,四构建在 mid-buffer×可见路径同带**;<30% 的跨构建差在本单 VM tty 装置上不可分辨,维持 PENDING 多轮矩阵(学说 3 不变);
+- "vanilla 比 fork 慢"本身同样是位置伪影,**禁止**作为结论外传。
+
+### 32.3 制度产出
+① 未来所有 tier 运行强制 round-robin 交错构建,禁固定顺序(EIPB.md 学说增补);② 尾部指标(p95/max)单会话置信不足,跨构建尾部比较一律待多会话;③ tag `enca-eipb-phase2-attribution-closure` 由本节授权,随 Phase 2.1 提交落地。

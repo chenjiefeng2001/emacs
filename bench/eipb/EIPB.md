@@ -33,6 +33,12 @@ must cite EIPB data.  It is not a victory lap; it is the instrument.
    architecture changes by itself.
 6. **Long-run stability is a first-class metric**: latency(t->inf)
    ~= latency(0) is an acceptance criterion, checked in T4 soak runs.
+7. **Round-robin build order mandatory** (added 2026-08-25, Phase
+   2.1): builds are interleaved (e.g. A,B,C,D x N rounds), never run
+   fixed-order -- a fixed order produced a phantom 1.3-3.8x "D gap"
+   that vanished under interleaving.  Single-session cross-build
+   deltas below ~30% are UNRESOLVABLE in the current tty/WSL rig and
+   must be reported as PENDING, never as regressions.
 
 ## 2. Coverage map (status 2026-08-25)
 
@@ -133,8 +139,10 @@ Line format:
     [x] Phase 1 (T1) designed + executed 2026-08-25 (REPORT section 30)
     [x] Phase 2 (T2) attribution phase -- contract below, executed
         2026-08-25 (REPORT section 31; verdict table
-        bench/eipb/phase2/report/PHASE2.md).  B/C rows on the
-        mid-buffer D-gap signal: PENDING (next matrix run)
+        bench/eipb/phase2/report/PHASE2.md)
+    [x] Phase 2.1 B/C attribution -- mid-buffer signal CLEARED
+        (session order artifact, not ENCA; REPORT section 32,
+        bench/eipb/phase2/report/PHASE2_1.md)
     [ ] Phase 3 (T3)
     [ ] Phase 4 (T4)
     [ ] Phase 5 (T5)

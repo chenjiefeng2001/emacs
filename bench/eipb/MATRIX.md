@@ -74,8 +74,16 @@ p50 ms unless noted; format D / A.
 file I/O ladder / isearch interactive / IDE-MIXED-01 trace /
 SOAK-30M+2H / GUI variants / external IDE reference:
 **PENDING (EIPB.md T3-T5)**.
-B/C rows on the mid-buffer D-vs-A gap (fl/plain + wb cells):
-**PENDING-B/C-CHECK** (next matrix run).
+Multi-session tail comparison across builds: PENDING (doctrine 3).
+
+## Tier 2.1 attribution closure (2026-08-25)
+
+The mid-buffer D-vs-A gap flagged above was re-measured under
+interleaved rounds A,B,C,D x2 with GC pinned and deterministic
+traces: it did NOT replicate (D/A medians 0.66-1.17, B~C~D on every
+cell, only vanilla-A off-band in the slow direction = run-order
+artifact).  ENCA cleared; no fork-base effect.  Details:
+bench/eipb/phase2/report/PHASE2_1.md (REPORT section 32).
 
 ## Notes
 
@@ -91,7 +99,6 @@ B/C rows on the mid-buffer D-vs-A gap (fl/plain + wb cells):
   it dwarfs every other tail in the table.
 - ENCA impact across editing/redisplay/search/undo: differences sit
   inside the noise band; no cell shows a systematic C/D regression.
-- Tier 2 * = unreplicated single-session gap, flagged PENDING-B/C-CHECK
-  (fork-base vs ENCA-enabled not separable without B/C rows).  The gap
-  appears ONLY on mid-buffer edit+visible paths; EOB insert, idle noop
-  and cold fontification show D==A exactly (PHASE2.md section 4).
+- Tier 2 * = unreplicated single-session gap.  RESOLVED 2026-08-25
+  by Phase 2.1 (interleaved B/C/D re-measure): artifact of fixed run
+  order, not ENCA -- see the Tier 2.1 section below.
