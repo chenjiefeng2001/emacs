@@ -182,6 +182,31 @@ stay stable over 30min/2h (slope-based RSS, tail amplification ratio,
 kill-emacs exit hang attribution REQUIRED).
 ===============================================================
 
+## Tier 4.1 SOAK-30M (2026-08-26)
+
+Source: bench/results/eipb_t41.log (+ eipb_t41_rss.csv); verdicts in
+bench/eipb/phase4/report/PHASE4_1.md.  One continuous 30-min mixed
+session per build, shuffled order A-D-B-C, ~13.7k ops each.
+
+| gate                        | A    | D    | B    | C     |
+|-----------------------------|------|------|------|-------|
+| ta/overall (<=2.0)          | 1.57 | 1.43 | 1.19 | 2.15* |
+| RSS slope post-warmup KB/h  | 201  | 104  | 165  | 111   |
+| teardown / kill-emacs exit  | clean| clean| clean| clean |
+
+(*) FAIL-as-measured then UNRESOLVABLE per doctrine 7: all builds
+converge to the same absolute tail p99 band 451-642 ms; C's low
+head baseline (260 vs 341-404 ms) inflates the ratio.  No ENCA
+direction (disabled-B tracks enabled-C/D).
+
+Atlas addendum v1.1: CLOSED rows stayed closed under sustained load
+(imenu/orgcycle/dired/winedit tails SHRINK after warmup; xref flat).
+Stall rows bounded, no takeoff (forced-GC p99 bounces 93-751 ms,
+no trend).  NEW build-independent finding: insert-typing medians
+grow ~4x over 30 min in ALL builds incl. disabled-B (type-c p50
+16->70..91 ms) -- saturate-vs-unbounded handed to SOAK-2H as the
+phase's open question.
+
 ## Notes
 
 - * = noise flag. Startup walls at the 100-300ms scale moved >2x

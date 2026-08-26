@@ -1047,3 +1047,20 @@ harness 三次迭代:①arm() 初版漏 didOpen → 首请求/纯移动单元全
 ### 36.3 T3 收官 —— Atlas 冻结 v1
 覆盖缺口清零(dired 落地)。**停顿列五项**:c-jit ≥100ms、大堆 GC 190–320ms、多窗重绘 ~45–47ms@8窗、imenu 冷索引 ~300–560ms、org/global sweep ~0.5s。**关闭列**:编辑/undo/isearch/file-I-O/LSP/completion transport/mixed 组合/xref/capf/dired 全操作/org 交互级。明确延期(非待办):真冷缓存打开、GUI 变体、magit 类流。
 **Phase 4 门禁**:SOAK 必须回答"关闭行是否持续关闭、停顿行是否保持稳定"(30M→2H),且 p32 的 kill-emacs 退出挂死列为 **T4 必须归因项**,不得以"主体没崩"判绿;RSS 判定按斜率(slope)而非首尾相减,区分合法增长与无界增长。
+
+## 37. P0-EIPB Phase 4.1 — SOAK-30M 混合负载长跑漂移(2026-08-26)
+
+### 37.1 执行概况
+每构建一条连续 30 分钟会话,乱序 A-D-B-C,合成 20 文件混合项目( elisp/c/python/org/text )连续回放:打字连发( c+elisp )、原生 capf 轮、imenu 刷新、xref grep 扫描、dired 小目录、org 子树/全局折叠、多窗编辑轮、强制 GC 采样;每周期 ≥4s 墙钟下限。442 cycles / 13736 ops( A ),四构建对称差 <1.5%,零 FATAL、零逐环错误。原始数据 results/eipb_t41.log(+ rss.csv 60s 侧车),判定书 bench/eipb/phase4/report/PHASE4_1.md。
+
+### 37.2 判定
+- **门禁 G2/G3/G4 四构建全过**:RSS 斜率 ≤0.2MB/h 无单调起飞(memory-limit 自第 2 窗起平台在 50.4–53.4MB);四连发 30 分钟会话 teardown→kill-emacs **全部 exit-clean**(p32 挂死在 soak 条件下未复现,tty 域清除、GUI 仍保留标记);停顿行有界无起飞(强制 GC p99 在 93–751ms 弹跳、无趋势;xref p99 平坦 ~1200–1400ms);
+- **G1 尾放大: A 1.57 / D 1.43 / B 1.19 过,C 2.15 边际不过** —— 按实测记 FAIL 后依学说 7 判 UNRESOLVABLE:四构建绝对尾 p99 收敛于同一 451–642ms 带,C 的比值由最低头部基线( 260 vs 341–404ms )抬高而非终态更差;B( ENCA 禁用 )与 C/D 同行同向,无 ENCA 方向;
+- **新事实( 全构建共有,含禁用 B ):插入型打字中位数 30 分钟单调增长 ~4×**( type-c p50:A 16→70、C 9→85、D 19→91、B 17→50ms;type-el 1.3→8–18ms ),占 op 量 65% 故主导池化 p50/p99 爬升与 C 的过线。工作负载/台架性质,不得归因 ENCA;**饱和 vs 无界 = SOAK-2H 的核心问题**;
+- 关闭行在持续负载下保持关闭:imenu/orgcycle/dired/winedit 尾部随预热**收缩**( per-class TA 多数 <1 ),冷启动一次性摊销。
+
+### 37.3 边界与工具记录
+- 启动前修复( 首次发射中止、未落任何测量字节 ):emacs_pid 以 %.4f 浮点发射致 runner pid 匹配失败→RSS 侧车全死(%d 发射 + int-cast + pgrep 回退);TA 由窗口制改为契约定义的首/末 10 分钟墙钟桶;新增 per-class 窗口漂移行;runner 增加 timeout 后 pkill 孤儿保险;
+- 桶式 TA 对快速头部敏感( C 即受害 ),已固定为同时发射绝对 head/tail p99,今后判读以带为准、比值为辅;
+- soak 的 capf 口径只计 completion-at-point(+强制 redisplay),不含 Completions 弹窗安装,与 T3.1 的 ~50ms 整轮口径不同,Atlas 行不受影响;
+- ENCA 内部计数器仍 PENDING-API( elisp 不可见 ),按学说排除于门禁外。

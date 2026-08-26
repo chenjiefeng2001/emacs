@@ -161,7 +161,12 @@ Line format:
         xref/imenu + org (REPORT 35); dired + atlas freeze v1
         (REPORT 36, 2026-08-26).  Deferred by decision: cold-cache
         opens, GUI variants, magit-class flows.
-    [ ] Phase 4 (T4)
+    [ ] Phase 4 (T4) -- 30M leg executed 2026-08-26 (REPORT 37,
+        bench/eipb/phase4/report/PHASE4_1.md): G2/G3/G4 pass x4;
+        G1 A/D/B pass, C 2.15 marginal-fail UNRESOLVABLE (absolute
+        tails converge; doctrine 7).  New universal finding:
+        insert-typing medians grow ~4x/30min in ALL builds incl
+        disabled-B -> saturate-vs-unbounded is SOAK-2H's question.
     [ ] Phase 5 (T5)
 
 ## 7. Phase 2 contract -- tail-latency attribution (frozen 2026-08-25)

@@ -99,13 +99,19 @@ GUI renderer、Range Snapshot、tree-sitter、cross-revision reuse
 ### 主线 — P0-EIPB(自 2026-08-25 起,见 bench/eipb/EIPB.md)
 全编辑器系统基准,所有后续性能决策的依据。纪律:禁综合分、
 百分位强制、A/B/C/D 四构建、tty/GUI 分离、§26 归因门禁不变。
-- Phase 1(T1 核心交互)✅ 已完成(REPORT §30 / MATRIX.md);
-  启动行噪声大待 N≥5 中位数;搜索口径为 elisp 循环含匹配开销;
-- Phase 2(T2 服务集成)⬜ 下一步:font-lock keypress→fontify→
-  redisplay→visible 链、文件 I/O 阶梯、multi-buffer×window、
-  isearch/imenu/xref、启动中位数化、GC 暂停与 font-lock 的归因;
-- Phase 3(T3)IDE-MIXED-01 全会话带时间戳轨迹;
-- Phase 4(T4)SOAK-30M/2H:latency(t→∞)≈latency(0) 验收;
+- Phase 1(T1 核心交互)✅(REPORT §30 / MATRIX.md);
+- Phase 2+2.1(T2 尾延迟归因)✅(REPORT §31/§32);
+- Phase 3.0–3.3(T3 用户路径覆盖)✅ Atlas 冻结 v1(REPORT §33-36);
+- Phase 4.1(SOAK-30M)✅ 2026-08-26(REPORT §37 /
+  bench/eipb/phase4/report/PHASE4_1.md):G2 RSS 斜率、G3 退出
+  挂死(p32 未复现,tty 域清除)、G4 停顿行稳定 全过;G1 尾放大
+  A/D/B 过、C 2.15 边际不过→学说 7 判 UNRESOLVABLE(四构建绝对
+  尾 p99 收敛于 451–642ms 带,C 只是头部基线最低)。**新发现:
+  插入打字中位数 30 分钟 ~4× 增长,全构建含禁用 B 共有 → 饱和
+  vs 无界是 SOAK-2H 的核心问题**;
+- Phase 4.2(SOAK-2H)⬜ 下一步:同 harness `eipb_soak_run.sh`,
+  `EIPB_SOAK_SECS=7200`(约 8.5h 墙钟,建议过夜);重点读打字
+  类窗口漂移是否饱和、C 的 G1 是否复现;
 - Phase 5(T5)外部 IDE 同 trace 对比(最后做)。
 **T1 已点名 GC 停顿(max ~190–320ms,vanilla 同在)= 第一个真实
 交互停顿候选;任何针对它的改动仍需 §26 归因流程。**
@@ -212,3 +218,11 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > 的交互停顿源——GC 强制暂停 max ~190–320ms,vanilla 同样存在。
 > 下一个 session 从 EIPB Phase 2(font-lock 链/文件 I/O/多窗口)
 > 开始,别回头做 runtime。)
+>
+> (2026-08-26 五补:Phase 2/2.1/3.0–3.3 已收官,Atlas 冻结 v1;
+> Phase 4.1 SOAK-30M 四构建落地——G1 尾放大 C 2.15 边际不过但
+> 绝对尾收敛、按学说 7 判 UNRESOLVABLE;真正的新信号是**全构建
+> 共有的打字中位数 ~4× 漂移**(含禁用 B),饱和 vs 无界交给
+> SOAK-2H(`EIPB_SOAK_SECS=7200`,~8.5h,建议过夜)。p32 退出挂死
+> 在 tty soak 下未复现。工具教训:pid 别用 %.4f 发射;TA 判读以
+> 绝对 head/tail 带为准。别回头做 runtime,也别在 2H 之前谈归因。)
