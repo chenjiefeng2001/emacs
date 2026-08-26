@@ -109,9 +109,15 @@ GUI renderer、Range Snapshot、tree-sitter、cross-revision reuse
   尾 p99 收敛于 451–642ms 带,C 只是头部基线最低)。**新发现:
   插入打字中位数 30 分钟 ~4× 增长,全构建含禁用 B 共有 → 饱和
   vs 无界是 SOAK-2H 的核心问题**;
-- Phase 4.2(SOAK-2H)⬜ 下一步:同 harness `eipb_soak_run.sh`,
-  `EIPB_SOAK_SECS=7200`(约 8.5h 墙钟,建议过夜);重点读打字
-  类窗口漂移是否饱和、C 的 G1 是否复现;
+- Phase 4.2(SOAK-2H)**已在跑**:2026-08-26 12:12 发射,乱序
+  C-D-A-B,零 harness 改动;原始数据 eipb_t42.log +
+  eipb_t42_rss.csv(不覆盖 t41);预计 ~20:20 完成。下个 session
+  只需:确认 `EIPB4_RUN_DONE` 与四块 teardown|status|clean →
+  `python3 bench/eipb/phase4/eipb_t41_analyze.py <t42.log>
+  <t42_rss.csv>` → 填 bench/eipb/phase4/report/PHASE4_2.md(骨架
+  已建,读数纪律已冻结)→ 更新 MATRIX/EIPB/REPORT → 提交。核心
+  问题只有一个:打字漂移饱和 vs 无界(analyzer 的 TYPING DRIFT
+  CURVE 段直接给判定);顺带看 C 头位重跑下 G1 是否换位重现;
 - Phase 5(T5)外部 IDE 同 trace 对比(最后做)。
 **T1 已点名 GC 停顿(max ~190–320ms,vanilla 同在)= 第一个真实
 交互停顿候选;任何针对它的改动仍需 §26 归因流程。**
