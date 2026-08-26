@@ -10,6 +10,8 @@
 ```text
 原名:Next-Gen Emacs Core / ENCA runtime 优化   ← 已终结
 现名:ENCA Real Completion / Semantic Latency
+(2026-08-26 身份补记:T1-T4 收官后,程序实际运作为"证据链完整的
+Emacs 交互性能归因平台";ENCA 继续优化目前无证据支撑。)
 ```
 
 项目性质已从"架构优化"转型为**语义延迟实验平台**。
@@ -246,3 +248,13 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > 位置混淆(C 头位最差),多会话分辨是学说 3 议题。下个 session
 > 主线只剩 Phase 5(外部 IDE 同 trace 对比);动手前重读 §0–§2
 > 与 PHASE4_2.md §6 读数纪律。)
+>
+> (2026-08-26 七补:评审定调两条纪律——①D 的准稳态**不记 ENCA
+> 功**(已写入 PHASE4_2 §6 增补);②B/C 长跑退化是悬案,随
+> Phase 5 做 Rider R 最小归因,任何阶段不得回头改 ENCA。
+> Phase 5 契约已冻结(bench/eipb/phase5/PHASE5.md):P5-0 探针
+> 先行(外部 IDE 能发射分段轨迹才入组,否则 OUT-OF-SCOPE);
+> P5-1 六行同轨迹矩阵(keypress→request→backend→result→visible,
+> W6 = t0 vs t+2h 会话龄对,直连 Rider R);P5-2 只比可解释路径
+> (OBSERVED-NOT-COMPARABLE 是一等结果)。下个 session 从 P5-0
+> 探针 + Rider R1(纯日志重读,零新运行)开始。)

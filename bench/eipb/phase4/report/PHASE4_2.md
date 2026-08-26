@@ -144,3 +144,8 @@ remain flagged.
  evidence may bear on it but cannot be patched into a pass.
 - A flat ~90ms plateau would NOT license "known Emacs issue"
  language; it licenses "steady-state reached, magnitude mapped".
+- Addendum 2026-08-26 (post-review): D's quasi-steady finish is
+ NOT an ENCA credit.  B/C divergence marks an unexplained common
+ factor (p0-tree builds / environment / slot) -> handed to Rider R
+ of Phase 5 (bench/eipb/phase5/PHASE5.md section 4); this report
+ grants no architecture or optimization license in any direction.

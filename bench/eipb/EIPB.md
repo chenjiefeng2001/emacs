@@ -125,6 +125,12 @@ non-eviction, snapshot retention, fragmentation, GC pressure).
 Same-trace comparison against VS Code/JetBrains on identical scripted
 workloads; user-perceivable paths only; no internal-implementation
 comparisons.  Explicitly out of scope until T1-T4 exist.
+(T1-T4 closed as of 2026-08-26.)  Contract frozen 2026-08-26:
+bench/eipb/phase5/PHASE5.md -- P5-0 instrumentation probe, P5-1
+six-row same-trace matrix (keypress->request->backend->result->
+visible decomposition), P5-2 explainable-path-only comparison
+rules, plus Rider R = minimal attribution ladder for the T4.2
+B/C long-session degradation question.
 
 ## 4. Metrics dictionary
 
@@ -176,7 +182,10 @@ Line format:
         ta/overall D 1.26, C/A/B 3.51/3.75/5.88 FAIL-as-measured
         UNRESOLVED (tails leave the T4.1 band; position-confounded;
         doctrine 3 multi-session next).
-    [ ] Phase 5 (T5)
+    [ ] Phase 5 (T5) -- contract frozen 2026-08-26
+        (bench/eipb/phase5/PHASE5.md); next step: P5-0
+        instrumentation probes (feasibility gate, zero measured
+        bytes before a subject passes) + Rider R1 log re-read.
 
 ## 7. Phase 2 contract -- tail-latency attribution (frozen 2026-08-25)
 
