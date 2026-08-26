@@ -8,8 +8,11 @@ import re
 import sys
 from collections import defaultdict
 
-LOG = "/mnt/c/Users/14977/source/repos/emacs/bench/results/eipb_t41.log"
-RSS = "/mnt/c/Users/14977/source/repos/emacs/bench/results/eipb_t41_rss.csv"
+# usage: eipb_t41_analyze.py [log] [rss]   (defaults = T4.1 artifacts)
+LOG = sys.argv[1] if len(sys.argv) > 1 else \
+    "/mnt/c/Users/14977/source/repos/emacs/bench/results/eipb_t41.log"
+RSS = sys.argv[2] if len(sys.argv) > 2 else \
+    "/mnt/c/Users/14977/source/repos/emacs/bench/results/eipb_t41_rss.csv"
 
 TA_GATE = 2.0          # p99(t_end) <= 2 x p99(t_0)  (frozen T4 gate)
 WARMUP_SAMPLES = 3     # RSS samples trimmed before slope fit
@@ -135,6 +138,40 @@ for b in builds:
         vals = ["%.0f" % wincls[b][(w, c, "p99")] for w in ws if (w, c, "p99") in wincls[b]]
         if vals:
             print(b, c, "p99:", " ".join(vals))
+
+# ------------- typing drift curve (T4.2 core question) -------------
+
+def lin_slope(ys, dx=1.0):
+    n = len(ys)
+    if n < 2:
+        return 0.0
+    xs = [i * dx for i in range(n)]
+    mx, my = sum(xs) / n, sum(ys) / n
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    den = sum((x - mx) ** 2 for x in xs)
+    return num / den if den else 0.0
+
+print("\n== TYPING DRIFT CURVE (p50 ms per 180s window) ==")
+print("saturating iff last-30min slope collapses vs first-30min")
+for b in builds:
+    ws = sorted({w for (w, _c, _m) in wincls[b]}, key=lambda x: int(x[3:]))
+    for c in ("type-c", "type-el"):
+        ser = [wincls[b][(w, c, "p50")] for w in ws
+               if (w, c, "p50") in wincls[b]]
+        if len(ser) < 10:
+            continue
+        nw = len(ser)
+        k = max(1, round(nw / 3))          # ~30 min of windows
+        head, tail = ser[:k], ser[-k:]
+        sh = lin_slope(head, 3.0)          # ms per minute
+        st = lin_slope(tail, 3.0)
+        plateau = sum(ser[-5:]) / 5.0
+        verdict = ("SATURATING" if abs(st) < 0.5 * abs(sh) or abs(st) < 0.05
+                   else "NON-SATURATING-WITHIN-RUN")
+        print("%s %s: w1=%.1f plateau(last5)=%.1f "
+              "slope_first%dwin=%+.3f slope_last%dwin=%+.3f ms/min -> %s"
+              % (b, c, ser[0], plateau, k, sh, k, st, verdict))
+        print("   series:", " ".join("%.1f" % v for v in ser))
 
 print("\n== WINDOWED gcs_delta + memlimit_kb ==")
 for b in builds:
