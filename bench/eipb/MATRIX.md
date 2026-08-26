@@ -207,6 +207,33 @@ grow ~4x over 30 min in ALL builds incl. disabled-B (type-c p50
 16->70..91 ms) -- saturate-vs-unbounded handed to SOAK-2H as the
 phase's open question.
 
+## Tier 4.2 SOAK-2H (2026-08-26)
+
+Source: bench/results/eipb_t42.log (+ eipb_t42_rss.csv); verdicts in
+bench/eipb/phase4/report/PHASE4_2.md.  One continuous 120-min mixed
+session per build, shuffled order C-D-A-B, zero harness changes,
+52.7-55.4k ops each, wall 8.03 h.
+
+| gate                        | C     | D    | A     | B     |
+|-----------------------------|-------|------|-------|-------|
+| ta/overall (<=2.0)          | 3.51* | 1.26 | 3.75* | 5.88* |
+| RSS slope post-warmup KB/h  | 96    | 85   | 71    | 84    |
+| teardown / kill-emacs exit  | clean | clean| clean | clean |
+
+(*) FAIL-as-measured; UNRESOLVED (NOT T4.1's UNRESOLVABLE): absolute
+tails no longer converge into one band (head/tail p99 ms:
+C 338->1189, A 109->409, B 105->619, D 395->498), single session
+per build with position confounded -- doctrine 3 multi-session work.
+
+**SOAK-2H core answer (Atlas addendum v1.2): the typing drift does
+NOT saturate within 2 h.**  type-c p50 ends at B ~344 / C ~295 /
+D ~70 / A ~65 ms; late-half slopes accelerate in B (+6.9 ms/min)
+and C (+5.4), only D is quasi-steady (~70 ms plateau).  Warm-up
+explanation rejected; long-session degradation candidate stands at
+>=2 h scale; disabled-B worst => ENCA exonerated again.  RSS flat,
+memory-limit ratchet +23-24 MB shared x4 => drift decoupled from
+memory pressure.  p32 exit hang still clear (8/8 clean soak exits).
+
 ## Notes
 
 - * = noise flag. Startup walls at the 100-300ms scale moved >2x

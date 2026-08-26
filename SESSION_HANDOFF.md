@@ -109,15 +109,19 @@ GUI renderer、Range Snapshot、tree-sitter、cross-revision reuse
   尾 p99 收敛于 451–642ms 带,C 只是头部基线最低)。**新发现:
   插入打字中位数 30 分钟 ~4× 增长,全构建含禁用 B 共有 → 饱和
   vs 无界是 SOAK-2H 的核心问题**;
-- Phase 4.2(SOAK-2H)**已在跑**:2026-08-26 12:12 发射,乱序
-  C-D-A-B,零 harness 改动;原始数据 eipb_t42.log +
-  eipb_t42_rss.csv(不覆盖 t41);预计 ~20:20 完成。下个 session
-  只需:确认 `EIPB4_RUN_DONE` 与四块 teardown|status|clean →
-  `python3 bench/eipb/phase4/eipb_t41_analyze.py <t42.log>
-  <t42_rss.csv>` → 填 bench/eipb/phase4/report/PHASE4_2.md(骨架
-  已建,读数纪律已冻结)→ 更新 MATRIX/EIPB/REPORT → 提交。核心
-  问题只有一个:打字漂移饱和 vs 无界(analyzer 的 TYPING DRIFT
-  CURVE 段直接给判定);顺带看 C 头位重跑下 G1 是否换位重现;
+- Phase 4.2(SOAK-2H)✅ 2026-08-26(REPORT §38 /
+  bench/eipb/phase4/report/PHASE4_2.md):零 harness 改动,
+  C-D-A-B 单 shuffle 连续四块,8.03h 墙钟,4/4 teardown clean,
+  p32 挂死累计 8/8 未复现。**核心判决:打字漂移 2h 不饱和**
+  (type-c 末段 B ~344 / C ~295 / D ~70 / A ~65 ms;B、C 尾段
+  加速,D 唯一准稳态)→ 长会话退化候选成立,禁用 B 最差 →
+  ENCA 再度排除。ta/overall D 1.26 过,C/A/B 3.51/3.75/5.88
+  FAIL-as-measured UNRESOLVED(绝对尾离开 T4.1 收敛带,位置与
+  构建混淆,归学说 3 多会话)。RSS 平(71–96 KB/h)、memlimit
+  四构建同步棘轮 +23–24MB → 漂移与内存压力解耦;
+- Phase 5(T5)外部 IDE 同 trace 对比(主线最后项);另:
+  G1 型尾放大的多会话分辨(学说 3,N≥2 交错会话)是 T4 遗留
+  的唯一 UNRESOLVED 项,可与 T5 并行或其后。
 - Phase 5(T5)外部 IDE 同 trace 对比(最后做)。
 **T1 已点名 GC 停顿(max ~190–320ms,vanilla 同在)= 第一个真实
 交互停顿候选;任何针对它的改动仍需 §26 归因流程。**
@@ -232,3 +236,13 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > SOAK-2H(`EIPB_SOAK_SECS=7200`,~8.5h,建议过夜)。p32 退出挂死
 > 在 tty soak 下未复现。工具教训:pid 别用 %.4f 发射;TA 判读以
 > 绝对 head/tail 带为准。别回头做 runtime,也别在 2H 之前谈归因。)
+>
+> (2026-08-26 六补:SOAK-2H 收官,Phase 4 全部完成。核心判决:
+> 打字漂移 2h 不饱和——B ~344/C ~295/D ~70/A ~65 ms,B、C 尾段
+> 还在加速,唯一准稳态是 full-ENCA D;禁用 B 最差 ⇒ ENCA 再度
+> 排除,长会话退化候选成立但与内存压力解耦(RSS 平、memlimit
+> 四构建同步棘轮)。注意:T4.1 的"绝对尾收敛带"论证在 2H 失效,
+> C/A/B 的 ta FAIL 记 UNRESOLVED 而非 UNRESOLVABLE——单会话 +
+> 位置混淆(C 头位最差),多会话分辨是学说 3 议题。下个 session
+> 主线只剩 Phase 5(外部 IDE 同 trace 对比);动手前重读 §0–§2
+> 与 PHASE4_2.md §6 读数纪律。)
