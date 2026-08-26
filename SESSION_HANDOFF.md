@@ -256,5 +256,16 @@ bench/REPORT.md                      §14-§26 全部 closure 叙事
 > 先行(外部 IDE 能发射分段轨迹才入组,否则 OUT-OF-SCOPE);
 > P5-1 六行同轨迹矩阵(keypress→request→backend→result→visible,
 > W6 = t0 vs t+2h 会话龄对,直连 Rider R);P5-2 只比可解释路径
-> (OBSERVED-NOT-COMPARABLE 是一等结果)。下个 session 从 P5-0
-> 探针 + Rider R1(纯日志重读,零新运行)开始。)
+> (OBSERVED-NOT-COMPARABLE 是一等结果)。)
+>
+> (2026-08-26 八补:Rider R1 收官——判定 **②**:GC/内存字段充分、
+> 但与 B/C 漂移无一致同步(B 两次 soak 漂移同向而 GC 率符号相反:
+> t41 gcs/op 比 1.29 / t42 0.23;memlimit 棘轮四构建共有且增量
+> 与延迟跳变零耦合;gcpause 无趋势;漂移仅 typing 类有 ⇒ 非全局
+> 内存压力画像)。正式缺字段:gc-cons-threshold 从未发射(唯一
+> 能救阈值增长故事的字段不可回读)、逐窗 p95。R2 跳过(前提
+> 不存在);R3 门控=先书面选定二分变量才许动台架(当前没有变量
+> 经得起推敲,D 的稳态已削弱"fork base"故事);R4 免费搭 P5-1
+> W6。主线现在做 P5-0 探针;若 W6 显示外部 IDE 同形漂移 → fork
+> 追查关闭、rider 以"unexplained-but-scoped"收官。判定书:
+> bench/eipb/phase5/report/RIDER_R1.md。)
